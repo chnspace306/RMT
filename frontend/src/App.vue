@@ -245,6 +245,7 @@
             <!-- Liquid Glass Switcher -->
             <div class="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 flex bg-black/40 backdrop-blur-xl border border-white/10 p-1 rounded-full shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
                 <button @click="currentView = 'spectrum'" :class="currentView === 'spectrum' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '光谱分布' : 'Spectrum' }}</button>
+                <button @click="currentView = 'ipr'" :class="currentView === 'ipr' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? 'IPR定位' : 'Localization' }}</button>
                 <button @click="currentView = 'heatmap'" :class="currentView === 'heatmap' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '降噪矩阵' : 'Heatmap' }}</button>
                 <button @click="currentView = 'rolling'" :class="currentView === 'rolling' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '风险演化' : 'Rolling Risk' }}</button>
             </div>
@@ -338,6 +339,18 @@
                 />
               </div>
             </Transition>
+            </div>
+
+            <!-- IPR Localization View -->
+            <div v-if="currentView === 'ipr'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative p-8">
+                <h2 class="text-xl font-bold mb-2 text-white/80">Inverse Participation Ratio (IPR)</h2>
+                <p class="text-white/40 text-xs mb-4">High IPR signals localized states (outliers), Low IPR signals noise (bulk).</p>
+                <div v-if="getDatasetProperty('ipr')" class="w-full h-full bg-black/20 rounded-xl border border-white/10" id="ipr-chart-container">
+                    <div ref="iprChartContainer" class="w-full h-full"></div>
+                </div>
+                <div v-else class="text-white/40 italic">
+                    {{ lang === 'zh' ? '请先上传数据以计算 IPR。' : 'Please upload data to compute IPR.' }}
+                </div>
             </div>
 
             <!-- Heatmap View -->
@@ -443,7 +456,7 @@ import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
 import RmtChart from './components/RmtChart.vue';
 import EigenvectorChart from './components/EigenvectorChart.vue';
-import { fetchWignerData, fetchMPData, uploadMatrix, streamAnalyze } from './api/rmt';
+import { fetchWignerData, fetchMPData, uploadMatrix, streamAnalyze, fetchRollingData } from './api/rmt';
 // @ts-ignore
 import * as echarts from 'echarts';
 
@@ -842,6 +855,91 @@ const handleOutlierClick = (anomalyIndex: number) => {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     });
+};
+
+const currentView = ref('spectrum');
+const isRolling = ref(false);
+const rollingData = ref<any>(null);
+const iprChartContainer = ref<HTMLElement | null>(null);
+
+watch(currentView, (newView) => {
+    if (newView === 'ipr') {
+        nextTick(() => {
+            renderIprChart();
+        });
+    }
+});
+
+const renderIprChart = () => {
+    const ipr = getDatasetProperty('ipr') as number[];
+    const evals = eigenvalues.value;
+    if (!ipr || !evals || !iprChartContainer.value) return;
+    
+    const chart = echarts.init(iprChartContainer.value);
+    const data = evals.map((v, i) => [v, ipr[i]]);
+    
+    chart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: { trigger: 'item', formatter: (params: any) => `λ: ${params.value[0].toFixed(4)}<br/>IPR: ${params.value[1].toFixed(4)}` },
+        xAxis: { type: 'value', name: 'Eigenvalue (λ)', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { show: false } },
+        yAxis: { type: 'value', name: 'IPR', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
+        series: [{
+            symbolSize: 8,
+            data: data,
+            type: 'scatter',
+            itemStyle: {
+                color: (params: any) => params.value[0] > lambdaPlus.value ? '#FFD700' : '#4facfe'
+            }
+        }]
+    });
+};
+
+const getDatasetProperty = (prop: keyof DatasetResult) => {
+    if (!currentDataset.value) return null;
+    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    return ds ? ds[prop] : null;
+};
+
+const runRollingAnalysis = async () => {
+    if (!currentDataset.value) return;
+    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    if (!ds || !ds.originalFile) {
+        alert(lang.value === 'zh' ? '请先上传原始数据集文件。' : 'Please upload original dataset file first.');
+        return;
+    }
+    
+    isRolling.value = true;
+    try {
+        const data = await fetchRollingData(ds.originalFile, 60, 5, useStandardization.value);
+        rollingData.value = data;
+        
+        // Quick render using echarts inside the rolling container
+        nextTick(() => {
+            const el = document.getElementById('rolling-chart-container');
+            if (el) {
+                // @ts-ignore
+                const myChart = echarts.init(el);
+                myChart.setOption({
+                    backgroundColor: 'transparent',
+                    tooltip: { trigger: 'axis', backgroundColor: 'rgba(25, 25, 35, 0.9)', textStyle: { color: '#fff' } },
+                    xAxis: { type: 'category', data: data.times, axisLabel: { color: 'rgba(255,255,255,0.6)' } },
+                    yAxis: { type: 'value', name: 'λ₁', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
+                    series: [{
+                        data: data.lambda_1,
+                        type: 'line',
+                        smooth: true,
+                        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(255, 69, 58, 0.3)'}, {offset: 1, color: 'rgba(255, 69, 58, 0)'}]) },
+                        lineStyle: { color: '#FF453A', width: 3 },
+                        itemStyle: { color: '#FF453A' }
+                    }]
+                });
+            }
+        });
+    } catch (e: any) {
+        alert("Rolling Analysis Failed: " + e.message);
+    } finally {
+        isRolling.value = false;
+    }
 };
 
 const fetchData = async () => {

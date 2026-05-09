@@ -201,17 +201,26 @@ async def upload_matrix(
             
             signal_indices = np.where(eigenvalues > lambda_plus)[0]
             if len(signal_indices) > 0:
+                # 方案：保留信号特征值，将噪音特征值替换为平均噪音强度 (bulk average)
+                # 这能更好地展示降噪后的板块结构，而非单纯的信号投影
+                bulk_indices = np.where(eigenvalues <= lambda_plus)[0]
+                avg_bulk_ev = np.mean(eigenvalues[bulk_indices]) if len(bulk_indices) > 0 else 0
+                
                 C_clean = np.zeros_like(C)
-                for idx in signal_indices:
-                    v = eigenvectors[:, idx:idx+1]
-                    C_clean += eigenvalues[idx] * np.dot(v, v.T)
-                np.fill_diagonal(C_clean, 1.0)
+                for i in range(len(eigenvalues)):
+                    ev = eigenvalues[i] if i in signal_indices else avg_bulk_ev
+                    v = eigenvectors[:, i:i+1]
+                    C_clean += ev * np.dot(v, v.T)
+                
+                # 强制对角线为1（标准化相关矩阵）
+                d = np.sqrt(np.diag(C_clean))
+                C_clean = C_clean / np.outer(d, d)
             else:
                 C_clean = C
             
-            # 使用暗色背景渲染热力图以适配前端
+            # 使用更鲜明的配色方案对比
             plt.style.use('dark_background')
-            fig, axes = plt.subplots(1, 2, figsize=(10, 4), facecolor='#1c1c1e')
+            fig, axes = plt.subplots(1, 2, figsize=(12, 5), facecolor='#1c1c1e')
             
             im1 = axes[0].imshow(C, cmap='coolwarm', vmin=-1, vmax=1)
             axes[0].set_title('Original Correlation Matrix', color='white', pad=10)
