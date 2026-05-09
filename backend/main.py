@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import io
 
-from backend.schemas import WignerRequest, WignerResponse, TheoreticalCurve, MPRequest, MPResponse, AnalyzeRequest, OutlierEigenvector, TopComponent
+from backend.schemas import WignerRequest, WignerResponse, TheoreticalCurve, MPRequest, MPResponse, AnalyzeRequest, OutlierEigenvector, TopComponent, RollingResponse
 from backend.rmt_core import generate_goe_eigenvalues, wigner_semicircle_pdf, generate_mp_eigenvalues, mp_pdf
 
 app = FastAPI(title="RMT Backend API", version="1.0.0")
@@ -186,6 +186,53 @@ async def upload_matrix(
             if rank >= 10:  # 最多展示前 10 个异常特征值的分解
                 break
         
+        # ====== IPR 计算与热力图渲染 ======
+        try:
+            ipr = np.sum(eigenvectors**4, axis=0).tolist()
+        except:
+            ipr = []
+            
+        cleaned_heatmap_base64 = None
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            import base64
+            
+            signal_indices = np.where(eigenvalues > lambda_plus)[0]
+            if len(signal_indices) > 0:
+                C_clean = np.zeros_like(C)
+                for idx in signal_indices:
+                    v = eigenvectors[:, idx:idx+1]
+                    C_clean += eigenvalues[idx] * np.dot(v, v.T)
+                np.fill_diagonal(C_clean, 1.0)
+            else:
+                C_clean = C
+            
+            # 使用暗色背景渲染热力图以适配前端
+            plt.style.use('dark_background')
+            fig, axes = plt.subplots(1, 2, figsize=(10, 4), facecolor='#1c1c1e')
+            
+            im1 = axes[0].imshow(C, cmap='coolwarm', vmin=-1, vmax=1)
+            axes[0].set_title('Original Correlation Matrix', color='white', pad=10)
+            axes[0].axis('off')
+            
+            im2 = axes[1].imshow(C_clean, cmap='coolwarm', vmin=-1, vmax=1)
+            axes[1].set_title('RMT Cleaned Heatmap', color='white', pad=10)
+            axes[1].axis('off')
+            
+            plt.tight_layout()
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', bbox_inches='tight', dpi=120, facecolor=fig.get_facecolor(), edgecolor='none')
+            plt.close(fig)
+            buf.seek(0)
+            cleaned_heatmap_base64 = "data:image/png;base64," + base64.b64encode(buf.read()).decode('utf-8')
+        except Exception as e:
+            print("Heatmap Render Error:", e)
+    else:
+        ipr = []
+        cleaned_heatmap_base64 = None
+        
     x_start = max(0.01, lambda_minus - 0.5 * sigma_sq)
     x_end = lambda_plus + 0.5 * sigma_sq
     x_theory = np.linspace(x_start, x_end, 200)
@@ -204,7 +251,9 @@ async def upload_matrix(
         n=n,
         p=p,
         outlier_eigenvectors=outlier_eigenvectors,
-        column_names=column_names
+        column_names=column_names,
+        ipr=ipr,
+        cleaned_heatmap_base64=cleaned_heatmap_base64
     )
 
 @app.post("/api/rmt/analyze")
@@ -267,3 +316,49 @@ async def analyze_rmt(req: AnalyzeRequest):
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
+@app.post("/api/rmt/rolling", response_model=RollingResponse)
+async def analyze_rolling(
+    file: UploadFile = File(...), 
+    window_size: int = Form(60),
+    step_size: int = Form(1),
+    standardize: str = Form("true")
+):
+    contents = await file.read()
+    text = contents.decode("utf-8")
+    
+    import warnings
+    mat = np.genfromtxt(io.StringIO(text), delimiter=',')
+    mat = mat[~np.isnan(mat).all(axis=1)]
+    if mat.ndim == 1:
+        mat = mat.reshape(1, -1)
+    
+    mat = mat[~np.isnan(mat).any(axis=1)]
+    n, p = mat.shape
+    is_std = standardize.lower() == "true"
+    
+    times = []
+    lambda_1_list = []
+    
+    for start in range(0, n - window_size + 1, step_size):
+        end = start + window_size
+        window_mat = mat[start:end, :]
+        
+        if is_std:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                stds = np.std(window_mat, axis=0)
+                stds[stds == 0] = 1.0
+                window_mat = (window_mat - np.mean(window_mat, axis=0)) / stds
+        
+        centered = window_mat - np.mean(window_mat, axis=0)
+        C = (1.0 / window_size) * np.dot(centered.T, centered)
+        
+        try:
+            eigenvalues, _ = np.linalg.eigh(C)
+            if len(eigenvalues) > 0:
+                lambda_1_list.append(float(np.max(eigenvalues)))
+                times.append(str(end))
+        except:
+            pass
+            
+    return RollingResponse(times=times, lambda_1=lambda_1_list)

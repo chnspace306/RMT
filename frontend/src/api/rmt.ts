@@ -66,3 +66,18 @@ export async function streamAnalyze(params: AnalyzeParams, onChunk: (text: strin
         onChunk(decoder.decode(value, { stream: true }));
     }
 }
+
+export async function fetchRollingData(file: File, windowSize: number = 60, stepSize: number = 1, standardize: boolean = true) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('window_size', windowSize.toString());
+  formData.append('step_size', stepSize.toString());
+  formData.append('standardize', standardize.toString());
+
+  const response = await fetch('http://127.0.0.1:8000/api/rmt/rolling', {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) throw new Error('Failed to fetch rolling data');
+  return response.json();
+}

@@ -15,6 +15,7 @@ const props = defineProps<Props>();
 
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
+let resizeObserver: ResizeObserver | null = null;
 
 const renderChart = () => {
   if (!chartInstance || !props.eigenvector || !props.eigenvector.vector) return;
@@ -120,11 +121,20 @@ onMounted(() => {
   if (chartRef.value) {
     chartInstance = echarts.init(chartRef.value);
     renderChart();
+    
+    resizeObserver = new ResizeObserver(() => {
+      chartInstance?.resize();
+    });
+    resizeObserver.observe(chartRef.value);
+    
     window.addEventListener('resize', handleResize);
   }
 });
 
 onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+  }
   if (chartInstance) {
     window.removeEventListener('resize', handleResize);
     chartInstance.dispose();

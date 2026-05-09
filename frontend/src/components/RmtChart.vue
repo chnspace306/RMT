@@ -22,6 +22,7 @@ const emit = defineEmits(['anomalies', 'outlier-click']);
 
 const chartRef = ref<HTMLElement | null>(null);
 let chartInstance: echarts.ECharts | null = null;
+let resizeObserver: ResizeObserver | null = null;
 
 // Track which bar indices are outliers for click-to-panel interaction
 let outlierBarIndices: number[] = [];
@@ -174,6 +175,12 @@ onMounted(() => {
   if (chartRef.value) {
     chartInstance = echarts.init(chartRef.value);
     renderChart();
+    
+    resizeObserver = new ResizeObserver(() => {
+      chartInstance?.resize();
+    });
+    resizeObserver.observe(chartRef.value);
+    
     window.addEventListener('resize', handleResize);
     
     // Chart → Panel: click anywhere in grid to select closest outlier
@@ -206,6 +213,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+  }
   if (chartInstance) {
     window.removeEventListener('resize', handleResize);
     chartInstance.dispose();

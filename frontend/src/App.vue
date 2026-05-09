@@ -241,6 +241,14 @@
 
         <!-- Right Column: Visualization -->
         <div class="lg:col-span-8 xl:col-span-9 glass-panel p-2 flex flex-col relative overflow-hidden min-h-[600px] lg:h-[calc(100vh-140px)] lg:sticky lg:top-8">
+            
+            <!-- Liquid Glass Switcher -->
+            <div class="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 flex bg-black/40 backdrop-blur-xl border border-white/10 p-1 rounded-full shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+                <button @click="currentView = 'spectrum'" :class="currentView === 'spectrum' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '光谱分布' : 'Spectrum' }}</button>
+                <button @click="currentView = 'heatmap'" :class="currentView === 'heatmap' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '降噪矩阵' : 'Heatmap' }}</button>
+                <button @click="currentView = 'rolling'" :class="currentView === 'rolling' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '风险演化' : 'Rolling Risk' }}</button>
+            </div>
+
             <div class="absolute top-4 left-6 z-10 pointer-events-none flex flex-col gap-2">
                 <div class="flex items-center pointer-events-auto">
                     <h2 class="text-2xl font-bold tracking-tight">
@@ -294,8 +302,10 @@
                 <p class="text-white/50 text-sm">{{ lang === 'zh' ? '经验特征值分布 vs. 理论概率密度' : 'Empirical Distribution vs. Theoretical Density' }}</p>
             </div>
             
-            <RmtChart 
-              ref="rmtChartRef"
+            <!-- Spectrum View -->
+            <div v-show="currentView === 'spectrum'" class="flex-grow flex flex-col h-full w-full relative">
+                <RmtChart 
+                  ref="rmtChartRef"
               v-if="eigenvalues.length > 0"
               :model="currentModel"
               :eigenvalues="eigenvalues"
@@ -328,6 +338,33 @@
                 />
               </div>
             </Transition>
+            </div>
+
+            <!-- Heatmap View -->
+            <div v-if="currentView === 'heatmap'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative p-8">
+                <h2 class="text-xl font-bold mb-4 text-white/80">RMT Cleaned Correlation Heatmap</h2>
+                <div v-if="getDatasetProperty('cleaned_heatmap_base64')" class="w-full max-h-full overflow-hidden rounded-xl border border-white/10 shadow-2xl flex items-center justify-center bg-black/20">
+                    <img :src="getDatasetProperty('cleaned_heatmap_base64')" class="max-w-full max-h-full object-contain" alt="Correlation Heatmap">
+                </div>
+                <div v-else class="text-white/40 italic">
+                    {{ lang === 'zh' ? '该数据集没有生成热力图，请重新上传以生成。' : 'No heatmap generated for this dataset. Please re-upload.' }}
+                </div>
+            </div>
+
+            <!-- Rolling View -->
+            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative p-8">
+                <h2 class="text-xl font-bold mb-4 text-white/80">Systemic Risk Evolution (λ₁)</h2>
+                <div class="flex flex-col items-center gap-4 bg-black/20 p-8 rounded-xl border border-white/10">
+                    <p class="text-white/60 text-sm text-center max-w-md">
+                        {{ lang === 'zh' ? '沿着时间轴动态滚动计算最大特征值，监测系统性风险的爆发。' : 'Rolling computation of the largest eigenvalue along the time axis to monitor systemic risk.' }}
+                    </p>
+                    <button @click="runRollingAnalysis" :disabled="!currentDataset || isRolling" class="px-6 py-2 bg-iosBlue rounded-full font-medium hover:bg-blue-600 transition disabled:opacity-50 flex items-center gap-2">
+                        <svg v-if="isRolling" class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        {{ lang === 'zh' ? '开始滚动计算' : 'Run Rolling Analysis' }}
+                    </button>
+                </div>
+                <div v-if="rollingData" class="w-full mt-4 h-[400px]" id="rolling-chart-container"></div>
+            </div>
 
             <!-- AI Button and Settings -->
             <div class="absolute top-4 right-4 flex gap-2 z-20">
@@ -407,6 +444,8 @@ import 'katex/dist/katex.min.css';
 import RmtChart from './components/RmtChart.vue';
 import EigenvectorChart from './components/EigenvectorChart.vue';
 import { fetchWignerData, fetchMPData, uploadMatrix, streamAnalyze } from './api/rmt';
+// @ts-ignore
+import * as echarts from 'echarts';
 
 marked.use(markedKatex({ throwOnError: false, nonStandard: true }));
 
@@ -485,6 +524,8 @@ interface DatasetResult {
     p: number;
     outlier_eigenvectors?: any[];
     column_names?: string[];
+    ipr?: number[];
+    cleaned_heatmap_base64?: string;
 }
 const uploadedDatasets = ref<DatasetResult[]>([]);
 
@@ -736,7 +777,9 @@ const handleFileUpload = async (e: Event) => {
             n: data.n,
             p: data.p,
             outlier_eigenvectors: data.outlier_eigenvectors || [],
-            column_names: data.column_names || []
+            column_names: data.column_names || [],
+            ipr: data.ipr || [],
+            cleaned_heatmap_base64: data.cleaned_heatmap_base64
         };
         const existIdx = uploadedDatasets.value.findIndex(d => d.name === file.name);
         if (existIdx >= 0) {
