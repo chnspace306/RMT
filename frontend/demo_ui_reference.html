@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMT 可视化分析工具 - 完整成品版 (Real Math Engine)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <!-- PapaParse for CSV reading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Numeric.js for Matrix Math & Eigenvalue Decomposition -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        iosBlue: '#0A84FF', iosGreen: '#32D74B', iosRed: '#FF453A', iosOrange: '#FF9F0A',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #000; overflow-x: hidden; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .mesh-bg { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; background: #0f0c29; overflow: hidden; }
+        .blob { position: absolute; filter: blur(90px); opacity: 0.7; border-radius: 50%; animation: float 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1); }
+        .blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: #5e2a9b; }
+        .blob-2 { bottom: -20%; right: -10%; width: 60vw; height: 60vw; background: #0A84FF; animation-delay: -5s; }
+        .blob-3 { top: 40%; left: 40%; width: 40vw; height: 40vw; background: #FF3B30; opacity: 0.4; animation-delay: -10s; }
+        @keyframes float { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(10%, 15%) scale(1.2); } }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4); border-radius: 28px;
+        }
+
+        /* Loading Overlay */
+        #loading-overlay { display: none; background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); z-index: 50; }
+        .loader { border: 4px solid rgba(255,255,255,0.1); border-top-color: #0A84FF; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #ffffff; cursor: pointer; margin-top: -8px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; cursor: pointer; background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+        input[type=range]:focus { outline: none; }
+        ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+    </style>
+</head>
+<body class="antialiased selection:bg-iosBlue selection:text-white flex flex-col min-h-screen">
+
+    <div class="mesh-bg"><div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 flex flex-col items-center justify-center">
+        <div class="loader mb-4"></div>
+        <h2 class="text-xl font-bold">Processing Matrix...</h2>
+        <p class="text-white/60 text-sm mt-2" id="loading-text">Computing Eigenvalues ($O(N^3)$ complexity)</p>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="w-full px-8 py-6 flex justify-between items-center z-10">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-iosBlue to-purple-500 flex items-center justify-center font-bold">R</div>
+            <span class="text-xl font-semibold tracking-tight text-white/90">RMT Analytics <span class="text-white/40 text-sm ml-2">Real Engine V2</span></span>
+        </div>
+        <button onclick="exportReport()" class="glass-panel px-6 py-2 text-sm font-medium hover:bg-white/10 transition duration-300 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+            Export Chart
+        </button>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow px-8 pb-12 grid grid-cols-1 lg:grid-cols-12 gap-6 z-10">
+        
+        <!-- Left Column: Controls & Upload -->
+        <div class="lg:col-span-3 flex flex-col gap-6">
+            
+            <!-- Real Upload Area -->
+            <label for="csv-upload" class="glass-panel p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/10 transition group border-dashed border-2 border-white/20 relative">
+                <input type="file" id="csv-upload" accept=".csv" class="hidden">
+                <svg class="w-12 h-12 text-white/60 mb-4 group-hover:text-iosBlue transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                <h3 class="font-medium text-lg text-white" id="upload-title">Upload Real Matrix</h3>
+                <p class="text-white/50 text-xs mt-2" id="upload-desc">CSV Format (Columns=Features)</p>
+            </label>
+
+            <!-- Model Switcher -->
+            <div class="glass-panel p-2 flex bg-black/20 rounded-full mx-2">
+                <button id="btn-mp" onclick="switchModel('MP')" class="flex-1 py-2 text-sm font-medium rounded-full bg-white/20 shadow text-white transition">Marchenko-Pastur</button>
+                <button id="btn-wigner" onclick="switchModel('WIGNER')" class="flex-1 py-2 text-sm font-medium rounded-full text-white/60 hover:text-white transition">Wigner Semicircle</button>
+            </div>
+
+            <!-- Parameters Panel -->
+            <div class="glass-panel p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="font-semibold text-lg flex items-center gap-2">
+                        <svg class="w-5 h-5 text-iosBlue" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                        Params
+                    </h3>
+                    <button onclick="generateRandomData()" class="text-xs bg-iosBlue/20 text-iosBlue px-2 py-1 rounded hover:bg-iosBlue/40">Auto-Mock Data</button>
+                </div>
+                
+                <div class="space-y-6">
+                    <!-- Ratio q -->
+                    <div id="control-q">
+                        <div class="flex justify-between text-sm mb-2 text-white/80">
+                            <span title="Ratio of dimensions (p/n)">Dim Ratio (q = p/n)</span>
+                            <span id="val-q" class="font-mono text-iosBlue">0.35</span>
+                        </div>
+                        <input type="range" id="slider-q" min="0.1" max="2.0" step="0.01" value="0.35">
+                    </div>
+
+                    <!-- Variance -->
+                    <div>
+                        <div class="flex justify-between text-sm mb-2 text-white/80">
+                            <span>Variance (σ²)</span>
+                            <span id="val-sigma" class="font-mono text-iosBlue">1.00</span>
+                        </div>
+                        <input type="range" id="slider-sigma" min="0.1" max="3.0" step="0.05" value="1.00">
+                    </div>
+                    
+                    <!-- Bins -->
+                    <div>
+                        <div class="flex justify-between text-sm mb-2 text-white/80">
+                            <span>Histogram Bins</span>
+                            <span id="val-bins" class="font-mono text-iosBlue">50</span>
+                        </div>
+                        <input type="range" id="slider-bins" min="10" max="100" step="5" value="50">
+                    </div>
+
+                    <div class="pt-4 border-t border-white/10">
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-white/60">Theory Upper Bound</span>
+                            <span id="val-lambda-plus" class="font-mono text-iosRed font-bold bg-iosRed/20 px-2 py-1 rounded">2.53</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Anomaly Insights -->
+            <div class="glass-panel p-6 flex-grow flex flex-col min-h-[250px]">
+                <h3 class="font-semibold text-lg mb-2 text-iosOrange flex justify-between">
+                    Signal Factors
+                    <span id="anomaly-count" class="text-xs bg-iosOrange/20 px-2 py-1 rounded">0 found</span>
+                </h3>
+                <p class="text-xs text-white/50 mb-4">Eigenvalues exceeding theoretical bounds, implying real underlying structures/noise.</p>
+                <div id="anomaly-list" class="space-y-2 overflow-y-auto pr-2 flex-grow">
+                    <p class="text-sm text-white/40 text-center mt-4">Upload data to detect signals</p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Visualization -->
+        <div class="lg:col-span-9 glass-panel p-2 flex flex-col relative overflow-hidden">
+            <div class="absolute top-4 left-6 z-10 pointer-events-none">
+                <h2 class="text-2xl font-bold tracking-tight" id="chart-title">Marchenko-Pastur Spectrum</h2>
+                <p class="text-white/50 text-sm mt-1" id="chart-subtitle">Empirical Distribution vs. Theoretical Density</p>
+            </div>
+            
+            <div id="chart" class="w-full flex-grow min-h-[600px] mt-12"></div>
+        </div>
+
+    </main>
+</body>
+</html>

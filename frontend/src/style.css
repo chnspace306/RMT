@@ -1,0 +1,114 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+body {
+  background-color: #000;
+  overflow-x: hidden;
+  color: white;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+}
+
+.mesh-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  background: #0f0c29;
+  overflow: hidden;
+}
+
+.blob {
+  position: absolute;
+  filter: blur(90px);
+  opacity: 0.7;
+  border-radius: 50%;
+  animation: float 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: #5e2a9b; }
+.blob-2 { bottom: -20%; right: -10%; width: 60vw; height: 60vw; background: #0A84FF; animation-delay: -5s; }
+.blob-3 { top: 40%; left: 40%; width: 40vw; height: 40vw; background: #FF3B30; opacity: 0.4; animation-delay: -10s; }
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(10%, 15%) scale(1.2); }
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  border-radius: 28px;
+}
+
+#loading-overlay { background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); z-index: 50; }
+.loader { border: 4px solid rgba(255,255,255,0.1); border-top-color: #0A84FF; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  cursor: pointer;
+  margin-top: -8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+input[type=range]:focus { outline: none; }
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+/* Custom Styling for Element Plus Slider */
+.custom-slider {
+  --el-slider-main-bg-color: #0A84FF;
+  --el-slider-runway-bg-color: rgba(255, 255, 255, 0.2);
+  --el-slider-button-wrap-bg-color: transparent;
+}
+
+/* ====== Eigenvector Panel Animations ====== */
+
+/* Slide expand/collapse transition */
+.eigvec-slide-enter-active {
+  animation: eigvecSlideIn 0.3s ease-out;
+}
+.eigvec-slide-leave-active {
+  animation: eigvecSlideIn 0.2s ease-in reverse;
+}
+@keyframes eigvecSlideIn {
+  0% { opacity: 0; max-height: 0; transform: translateY(-8px); }
+  100% { opacity: 1; max-height: 300px; transform: translateY(0); }
+}
+
+/* Staggered bar row entrance */
+.eigvec-bar-enter {
+  animation: barRowIn 0.35s ease-out both;
+}
+@keyframes barRowIn {
+  0% { opacity: 0; transform: translateX(-12px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* Animated bar fill (grows from 0 to target width) */
+.eigvec-bar-fill {
+  animation: barFillGrow 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@keyframes barFillGrow {
+  0% { width: 0%; }
+  100% { width: var(--target-width, 50%); }
+}
