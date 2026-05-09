@@ -66,3 +66,6 @@ class MPResponse(BaseModel):
 class RollingResponse(BaseModel):
     times: List[str] = []
     lambda_1: List[float] = []
+
+class HeatmapResponse(BaseModel):
+    cleaned_heatmap_base64: str

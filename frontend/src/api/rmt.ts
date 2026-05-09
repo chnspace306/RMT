@@ -81,3 +81,19 @@ export async function fetchRollingData(file: File, windowSize: number = 60, step
   if (!response.ok) throw new Error('Failed to fetch rolling data');
   return response.json();
 }
+
+export async function fetchHeatmapRebuild(file: File, topK: number = -1, scale: number = 1.0, fillStrategy: string = 'zero', standardize: boolean = true) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('top_k', topK.toString());
+  formData.append('scale', scale.toString());
+  formData.append('fill_strategy', fillStrategy);
+  formData.append('standardize', standardize.toString());
+
+  const response = await fetch('http://127.0.0.1:8000/api/rmt/heatmap_rebuild', {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) throw new Error('Failed to rebuild heatmap');
+  return response.json();
+}

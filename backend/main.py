@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import io
 
-from backend.schemas import WignerRequest, WignerResponse, TheoreticalCurve, MPRequest, MPResponse, AnalyzeRequest, OutlierEigenvector, TopComponent, RollingResponse
+from backend.schemas import WignerRequest, WignerResponse, TheoreticalCurve, MPRequest, MPResponse, AnalyzeRequest, OutlierEigenvector, TopComponent, RollingResponse, HeatmapResponse
 from backend.rmt_core import generate_goe_eigenvalues, wigner_semicircle_pdf, generate_mp_eigenvalues, mp_pdf
 
 app = FastAPI(title="RMT Backend API", version="1.0.0")
@@ -336,13 +336,38 @@ async def analyze_rolling(
     text = contents.decode("utf-8")
     
     import warnings
-    mat = np.genfromtxt(io.StringIO(text), delimiter=',')
-    mat = mat[~np.isnan(mat).all(axis=1)]
-    if mat.ndim == 1:
-        mat = mat.reshape(1, -1)
+    import pandas as pd
     
-    mat = mat[~np.isnan(mat).any(axis=1)]
+    try:
+        df = pd.read_csv(io.StringIO(text))
+        df = df.dropna(axis=1, how='all')
+        
+        time_col = None
+        if df.dtypes.iloc[0] == 'object' or pd.api.types.is_datetime64_any_dtype(df.dtypes.iloc[0]):
+            time_col = df.iloc[:, 0].astype(str).tolist()
+            df = df.iloc[:, 1:]
+        
+        # 强制转换为 float，处理可能残留的字符串
+        df = df.apply(pd.to_numeric, errors='coerce')
+        df = df.dropna(axis=1, how='all')
+        df = df.dropna()
+        mat = df.values.astype(float)
+        
+        if time_col is None:
+            time_col = [str(i) for i in range(len(df))]
+        else:
+            time_col = [time_col[i] for i in df.index]
+            
+    except Exception as e:
+        mat = np.genfromtxt(io.StringIO(text), delimiter=',')
+        mat = mat[~np.isnan(mat).all(axis=1)]
+        mat = mat[~np.isnan(mat).any(axis=1)]
+        time_col = [str(i) for i in range(len(mat))]
+        
     n, p = mat.shape
+    if n < window_size:
+        return RollingResponse(times=[], lambda_1=[])
+        
     is_std = standardize.lower() == "true"
     
     times = []
@@ -366,8 +391,104 @@ async def analyze_rolling(
             eigenvalues, _ = np.linalg.eigh(C)
             if len(eigenvalues) > 0:
                 lambda_1_list.append(float(np.max(eigenvalues)))
-                times.append(str(end))
+                # 记录窗口结束时的时间点
+                idx_to_record = min(end - 1, len(time_col) - 1)
+                times.append(str(time_col[idx_to_record]))
         except:
             pass
             
     return RollingResponse(times=times, lambda_1=lambda_1_list)
+
+@app.post("/api/rmt/heatmap_rebuild", response_model=HeatmapResponse)
+async def heatmap_rebuild(
+    file: UploadFile = File(...), 
+    top_k: int = Form(-1),
+    scale: float = Form(1.0),
+    fill_strategy: str = Form("zero"),
+    standardize: str = Form("true")
+):
+    contents = await file.read()
+    text = contents.decode("utf-8")
+    import pandas as pd
+    
+    # 极简复用解析逻辑
+    try:
+        df = pd.read_csv(io.StringIO(text))
+        df = df.dropna(axis=1, how='all')
+        if df.dtypes.iloc[0] == 'object' or pd.api.types.is_datetime64_any_dtype(df.dtypes.iloc[0]):
+            df = df.iloc[:, 1:]
+        if fill_strategy == 'drop':
+            df = df.dropna()
+        elif fill_strategy == 'mean':
+            df = df.fillna(df.mean())
+        else:
+            df = df.fillna(0.0)
+        mat = df.values
+    except:
+        mat = np.genfromtxt(io.StringIO(text), delimiter=',')
+        mat = mat[~np.isnan(mat).any(axis=1)]
+        
+    n, p = mat.shape
+    q = p / n if n > 0 else 1.0
+    is_std = standardize.lower() == "true"
+    
+    if n > 1 and p > 0:
+        if is_std:
+            stds = np.std(mat, axis=0)
+            stds[stds == 0] = 1.0
+            mat = (mat - np.mean(mat, axis=0)) / stds
+        centered = mat - np.mean(mat, axis=0)
+        C = (1.0 / n) * np.dot(centered.T, centered)
+        eigenvalues, eigenvectors = np.linalg.eigh(C)
+    else:
+        return HeatmapResponse(cleaned_heatmap_base64="")
+        
+    sigma_sq = float(np.mean(eigenvalues)) if len(eigenvalues)>0 else 1.0
+    lambda_plus = sigma_sq * (1 + np.sqrt(q))**2
+    
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import base64
+    
+    signal_indices = np.where(eigenvalues > lambda_plus)[0]
+    
+    if top_k >= 0:
+        # 只保留前 top_k 个异常值
+        sorted_signal_idx = np.argsort(eigenvalues[signal_indices])[::-1]
+        kept_idx = sorted_signal_idx[:top_k]
+        signal_indices = signal_indices[kept_idx]
+        
+    if len(signal_indices) > 0:
+        # 获取被抛弃的特征值的均值
+        dropped_indices = np.setdiff1d(np.arange(len(eigenvalues)), signal_indices)
+        avg_bulk_ev = np.mean(eigenvalues[dropped_indices]) if len(dropped_indices) > 0 else 0
+        
+        C_clean = np.zeros_like(C)
+        for i in range(len(eigenvalues)):
+            ev = eigenvalues[i] if i in signal_indices else avg_bulk_ev
+            v = eigenvectors[:, i:i+1]
+            C_clean += ev * np.dot(v, v.T)
+        
+        d = np.sqrt(np.diag(C_clean))
+        d[d==0] = 1.0
+        C_clean = C_clean / np.outer(d, d)
+    else:
+        C_clean = C
+        
+    plt.style.use('dark_background')
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5), facecolor='#1c1c1e')
+    im1 = axes[0].imshow(C, cmap='coolwarm', vmin=-1, vmax=1)
+    axes[0].set_title('Original Correlation Matrix', color='white', pad=10)
+    axes[0].axis('off')
+    im2 = axes[1].imshow(C_clean, cmap='coolwarm', vmin=-1, vmax=1)
+    axes[1].set_title(f'RMT Cleaned (Top {len(signal_indices)} Signals)', color='white', pad=10)
+    axes[1].axis('off')
+    plt.tight_layout()
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', dpi=120, facecolor=fig.get_facecolor(), edgecolor='none')
+    plt.close(fig)
+    buf.seek(0)
+    base64_str = "data:image/png;base64," + base64.b64encode(buf.read()).decode('utf-8')
+    
+    return HeatmapResponse(cleaned_heatmap_base64=base64_str)

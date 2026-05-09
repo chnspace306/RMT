@@ -342,22 +342,48 @@
             </div>
 
             <!-- IPR Localization View -->
-            <div v-if="currentView === 'ipr'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative p-8">
-                <h2 class="text-xl font-bold mb-2 text-white/80">Inverse Participation Ratio (IPR)</h2>
-                <p class="text-white/40 text-xs mb-4">High IPR signals localized states (outliers), Low IPR signals noise (bulk).</p>
+            <div v-if="currentView === 'ipr'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
+                <h2 class="text-xl font-bold mb-2 text-white/80">{{ lang === 'zh' ? '逆参与率 (IPR) 局部化定位' : 'Inverse Participation Ratio (IPR)' }}</h2>
+                <p class="text-white/40 text-xs mb-4">{{ lang === 'zh' ? '高 IPR 代表局部化状态（异常信号），低 IPR 代表全局噪声。点击图中异常点可查看其特征向量成分。' : 'High IPR signals localized states (outliers), Low IPR signals noise (bulk). Click points to view details.' }}</p>
                 <div v-if="getDatasetProperty('ipr')" class="w-full h-full bg-black/20 rounded-xl border border-white/10" id="ipr-chart-container">
                     <div ref="iprChartContainer" class="w-full h-full"></div>
                 </div>
                 <div v-else class="text-white/40 italic">
                     {{ lang === 'zh' ? '请先上传数据以计算 IPR。' : 'Please upload data to compute IPR.' }}
                 </div>
+                <!-- Eigenvector Full Chart under IPR -->
+                <Transition name="eigvec-slide">
+                  <div v-if="expandedEigenvector !== null && getEigenvectorForAnomaly(expandedEigenvector) && currentView === 'ipr'" class="w-full mt-4 border border-white/10 relative bg-black/30 backdrop-blur-md rounded-2xl overflow-hidden shadow-lg z-10 shrink-0 mb-2">
+                    <div class="px-4 py-2 flex justify-between items-center bg-white/5 border-b border-white/10">
+                       <h3 class="text-sm font-bold text-white/80 font-mono">
+                         {{ lang === 'zh' ? '特征向量成分 (λ=' + getEigenvectorForAnomaly(expandedEigenvector).eigenvalue.toFixed(4) + ')' : 'Eigenvector Components (λ=' + getEigenvectorForAnomaly(expandedEigenvector).eigenvalue.toFixed(4) + ')' }}
+                       </h3>
+                       <button @click="expandedEigenvector = null" class="text-white/40 hover:text-white transition p-1 rounded-full hover:bg-white/10">
+                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                       </button>
+                    </div>
+                    <EigenvectorChart 
+                      :eigenvector="getEigenvectorForAnomaly(expandedEigenvector)"
+                      :columnNames="columnNames"
+                      :lang="lang"
+                    />
+                  </div>
+                </Transition>
             </div>
 
             <!-- Heatmap View -->
-            <div v-if="currentView === 'heatmap'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative p-8">
-                <h2 class="text-xl font-bold mb-4 text-white/80">RMT Cleaned Correlation Heatmap</h2>
-                <div v-if="getDatasetProperty('cleaned_heatmap_base64')" class="w-full max-h-full overflow-hidden rounded-xl border border-white/10 shadow-2xl flex items-center justify-center bg-black/20">
-                    <img :src="getDatasetProperty('cleaned_heatmap_base64')" class="max-w-full max-h-full object-contain" alt="Correlation Heatmap">
+            <div v-if="currentView === 'heatmap'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
+                <h2 class="text-xl font-bold mb-4 text-white/80">{{ lang === 'zh' ? 'RMT 降噪相关性矩阵 (层析分析)' : 'RMT Cleaned Correlation Heatmap' }}</h2>
+                <div v-if="getDatasetProperty('cleaned_heatmap_base64')" class="w-full flex flex-col items-center h-full min-h-0">
+                    <div class="mb-4 flex items-center gap-4 bg-black/30 px-6 py-3 rounded-full border border-white/10">
+                        <span class="text-white/70 text-sm">{{ lang === 'zh' ? '仅保留前 N 个核心信号:' : 'Keep Top N Signals:' }}</span>
+                        <input type="range" min="-1" :max="anomalies.length" v-model.number="heatmapTopK" @input="debouncedHeatmapRebuild" class="w-48 cursor-pointer">
+                        <span class="text-white font-mono font-bold w-12 text-center">{{ heatmapTopK === -1 ? (lang === 'zh' ? '全部' : 'All') : heatmapTopK }}</span>
+                        <svg v-if="isRebuildingHeatmap" class="animate-spin h-5 w-5 text-iosBlue" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    </div>
+                    <div class="w-full flex-grow overflow-hidden rounded-xl border border-white/10 shadow-2xl flex items-center justify-center bg-black/20">
+                        <img :src="getDatasetProperty('cleaned_heatmap_base64')" class="max-w-full max-h-full object-contain" alt="Correlation Heatmap">
+                    </div>
                 </div>
                 <div v-else class="text-white/40 italic">
                     {{ lang === 'zh' ? '该数据集没有生成热力图，请重新上传以生成。' : 'No heatmap generated for this dataset. Please re-upload.' }}
@@ -365,8 +391,8 @@
             </div>
 
             <!-- Rolling View -->
-            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative p-8">
-                <h2 class="text-xl font-bold mb-4 text-white/80">Systemic Risk Evolution (λ₁)</h2>
+            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
+                <h2 class="text-xl font-bold mb-4 text-white/80">{{ lang === 'zh' ? '系统性风险演化 (最高共振频段 λ₁)' : 'Systemic Risk Evolution (λ₁)' }}</h2>
                 <div class="flex flex-col items-center gap-4 bg-black/20 p-8 rounded-xl border border-white/10">
                     <p class="text-white/60 text-sm text-center max-w-md">
                         {{ lang === 'zh' ? '沿着时间轴动态滚动计算最大特征值，监测系统性风险的爆发。' : 'Rolling computation of the largest eigenvalue along the time axis to monitor systemic risk.' }}
@@ -449,7 +475,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue';
+import { ref, onMounted, computed, nextTick, watch } from 'vue';
 import { marked } from 'marked';
 // @ts-ignore
 import markedKatex from 'marked-katex-extension';
@@ -881,16 +907,26 @@ const renderIprChart = () => {
     chart.setOption({
         backgroundColor: 'transparent',
         tooltip: { trigger: 'item', formatter: (params: any) => `λ: ${params.value[0].toFixed(4)}<br/>IPR: ${params.value[1].toFixed(4)}` },
-        xAxis: { type: 'value', name: 'Eigenvalue (λ)', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { show: false } },
+        xAxis: { type: 'value', name: lang.value === 'zh' ? '特征值 (λ)' : 'Eigenvalue (λ)', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { show: false } },
         yAxis: { type: 'value', name: 'IPR', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
         series: [{
-            symbolSize: 8,
+            symbolSize: (params: any) => params[0] > lambdaPlus.value ? 12 : 6,
             data: data,
             type: 'scatter',
             itemStyle: {
                 color: (params: any) => params.value[0] > lambdaPlus.value ? '#FFD700' : '#4facfe'
             }
         }]
+    });
+    
+    chart.off('click');
+    chart.on('click', (params: any) => {
+        const rank = params.dataIndex + 1; // eigenvalues are sorted descending
+        if (anomalies.value.includes(rank)) {
+            handleOutlierClick(rank);
+        } else {
+            alert(lang.value === 'zh' ? '此点处于噪音区间，无显著特征向量分布可查看。' : 'This point is in the bulk (noise) region. No significant eigenvector loadings.');
+        }
     });
 };
 
@@ -923,7 +959,11 @@ const runRollingAnalysis = async () => {
                     backgroundColor: 'transparent',
                     tooltip: { trigger: 'axis', backgroundColor: 'rgba(25, 25, 35, 0.9)', textStyle: { color: '#fff' } },
                     xAxis: { type: 'category', data: data.times, axisLabel: { color: 'rgba(255,255,255,0.6)' } },
-                    yAxis: { type: 'value', name: 'λ₁', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
+                    yAxis: { type: 'value', name: 'λ₁', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } }, scale: true },
+                    dataZoom: [
+                        { type: 'inside', start: 0, end: 100 },
+                        { type: 'slider', start: 0, end: 100, textStyle: { color: 'rgba(255,255,255,0.5)' }, borderColor: 'rgba(255,255,255,0.1)' }
+                    ],
                     series: [{
                         data: data.lambda_1,
                         type: 'line',
@@ -939,6 +979,35 @@ const runRollingAnalysis = async () => {
         alert("Rolling Analysis Failed: " + e.message);
     } finally {
         isRolling.value = false;
+    }
+};
+
+// Heatmap Interactive Rebuild
+const heatmapTopK = ref(-1);
+const isRebuildingHeatmap = ref(false);
+let heatmapDebounce: any = null;
+
+const debouncedHeatmapRebuild = () => {
+    if (heatmapDebounce) clearTimeout(heatmapDebounce);
+    heatmapDebounce = setTimeout(() => {
+        rebuildHeatmap();
+    }, 500);
+};
+
+const rebuildHeatmap = async () => {
+    if (!currentDataset.value) return;
+    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    if (!ds || !ds.originalFile) return;
+    
+    isRebuildingHeatmap.value = true;
+    try {
+        const { fetchHeatmapRebuild } = await import('./api/rmt');
+        const data = await fetchHeatmapRebuild(ds.originalFile, heatmapTopK.value, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
+        ds.cleaned_heatmap_base64 = data.cleaned_heatmap_base64;
+    } catch (e: any) {
+        console.error("Heatmap rebuild error:", e);
+    } finally {
+        isRebuildingHeatmap.value = false;
     }
 };
 
