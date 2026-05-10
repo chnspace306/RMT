@@ -36,37 +36,37 @@ export async function uploadMatrix(file: File, scale: number, fillStrategy: stri
 }
 
 interface AnalyzeParams {
-    dataset_name: string;
-    n: number;
-    p: number;
-    q: number;
-    sparsity: number;
-    lambda_plus: number;
-    lambda_minus: number;
-    top_eigenvalues: number[];
-    outlier_count: number;
-    model_name: string;
-    api_key: string;
-    base_url: string;
-    eigenvector_summary: string;
+  dataset_name: string;
+  n: number;
+  p: number;
+  q: number;
+  sparsity: number;
+  lambda_plus: number;
+  lambda_minus: number;
+  top_eigenvalues: number[];
+  outlier_count: number;
+  model_name: string;
+  api_key: string;
+  base_url: string;
+  eigenvector_summary: string;
 }
 
 export async function streamAnalyze(params: AnalyzeParams, onChunk: (text: string) => void) {
-    const response = await fetch(`${API_BASE_URL}/api/rmt/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(params)
-    });
-    
-    if (!response.ok || !response.body) throw new Error('API Request Failed Verification.');
-    
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        onChunk(decoder.decode(value, { stream: true }));
-    }
+  const response = await fetch(`${API_BASE_URL}/api/rmt/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+
+  if (!response.ok || !response.body) throw new Error('API Request Failed Verification.');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    onChunk(decoder.decode(value, { stream: true }));
+  }
 }
 
 export async function fetchRollingData(file: File, windowSize: number = 60, stepSize: number = 1, standardize: boolean = true) {

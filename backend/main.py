@@ -20,6 +20,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def health_check():
+    return {"status": "ok", "message": "RMT Backend is running"}
+
 @app.post("/api/rmt/wigner", response_model=WignerResponse)
 def get_wigner_data(req: WignerRequest):
     # 生成实际的高斯正交系 (GOE) 随机矩阵特征值
