@@ -16,9 +16,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 这样 main.py 中的 from backend.schemas import ... 才能正常工作
 COPY . ./backend/
 
-# 暴露端口
-EXPOSE 8000
+# 暴露端口 (与 Zeabur 截图中的 8080 保持一致)
+EXPOSE 8080
 
 # 启动命令
-# 使用 ${PORT:-8000} 让 Zeabur 可以通过 PORT 环境变量指定端口
-CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# 使用 ${PORT:-8080} 确保即使环境变量失效，也默认运行在 8080 端口
+CMD uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080}

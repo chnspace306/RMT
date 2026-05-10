@@ -25,6 +25,9 @@ FROM nginx:stable-alpine AS production-stage
 # 从构建阶段复制打包好的静态文件
 COPY --from=build-stage /app/dist /usr/share/nginx/html
 
+# 复制自定义 Nginx 配置以启用反向代理
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # 暴露 Nginx 默认端口
 EXPOSE 80
 
