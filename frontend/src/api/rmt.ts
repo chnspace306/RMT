@@ -1,5 +1,7 @@
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+
 export async function fetchWignerData(n: number, scale: number) {
-  const response = await fetch('http://127.0.0.1:8000/api/rmt/wigner', {
+  const response = await fetch(`${API_BASE_URL}/api/rmt/wigner`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ n, scale })
@@ -9,7 +11,7 @@ export async function fetchWignerData(n: number, scale: number) {
 }
 
 export async function fetchMPData(n: number, p: number, scale: number) {
-  const response = await fetch('http://127.0.0.1:8000/api/rmt/mp', {
+  const response = await fetch(`${API_BASE_URL}/api/rmt/mp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ n, p, scale })
@@ -25,7 +27,7 @@ export async function uploadMatrix(file: File, scale: number, fillStrategy: stri
   formData.append('fill_strategy', fillStrategy);
   formData.append('standardize', standardize.toString());
 
-  const response = await fetch('http://127.0.0.1:8000/api/rmt/upload', {
+  const response = await fetch(`${API_BASE_URL}/api/rmt/upload`, {
     method: 'POST',
     body: formData
   });
@@ -50,7 +52,7 @@ interface AnalyzeParams {
 }
 
 export async function streamAnalyze(params: AnalyzeParams, onChunk: (text: string) => void) {
-    const response = await fetch('http://127.0.0.1:8000/api/rmt/analyze', {
+    const response = await fetch(`${API_BASE_URL}/api/rmt/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params)
@@ -74,7 +76,7 @@ export async function fetchRollingData(file: File, windowSize: number = 60, step
   formData.append('step_size', stepSize.toString());
   formData.append('standardize', standardize.toString());
 
-  const response = await fetch('http://127.0.0.1:8000/api/rmt/rolling', {
+  const response = await fetch(`${API_BASE_URL}/api/rmt/rolling`, {
     method: 'POST',
     body: formData
   });
@@ -90,7 +92,7 @@ export async function fetchHeatmapRebuild(file: File, topK: number = -1, scale: 
   formData.append('fill_strategy', fillStrategy);
   formData.append('standardize', standardize.toString());
 
-  const response = await fetch('http://127.0.0.1:8000/api/rmt/heatmap_rebuild', {
+  const response = await fetch(`${API_BASE_URL}/api/rmt/heatmap_rebuild`, {
     method: 'POST',
     body: formData
   });

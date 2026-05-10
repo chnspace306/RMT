@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
