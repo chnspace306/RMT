@@ -1,50 +1,65 @@
-# RMT 平台公网部署指南 (Vercel + Render/Railway)
+# RMT 平台公网部署指南 (Zeabur 全栈部署)
 
-为了实现最专业的公网访问体验，我们采用 **Vercel (前端)** + **Render/Railway (后端)** 的黄金组合。
-
----
-
-## 步骤 1：部署 Python 后端 (Render 或 Railway)
-
-建议先部署后端，以获取公网 API 地址。
-
-### 选项 A：使用 Render.com (推荐)
-1. 登录 [Render.com](https://render.com/)。
-2. 点击 **"New +" -> "Blueprint"**。
-3. 连接 GitHub 仓库并选择 `RMT`。
-4. Render 会自动识别根目录的 `render.yaml` 并启动部署。
-5. **获取 URL**：部署成功后，你会得到一个类似 `https://rmt-backend-xxx.onrender.com` 的地址。
-
-### 选项 B：使用 Railway.app
-1. 登录 [Railway.app](https://railway.app/)。
-2. 点击 **"New Project" -> "Deploy from GitHub repo"**。
-3. 选中 `RMT` 仓库。
-4. 在 Variables 设置中，如果报错，请确保添加 `PORT` 变量（通常 Railway 会自动处理）。
-5. **获取 URL**：在 Settings 选项卡下生成一个 Domain。
+本指南将带您在 Zeabur 上完成前后端的完整部署。
 
 ---
 
-## 步骤 2：部署 Vue 前端 (Vercel)
+## 前提条件
 
-Vercel 是目前最强大的前端托管平台，支持代码推送即发布。
-
-1. 登录 [Vercel.com](https://vercel.com/)。
-2. 点击 **"Add New" -> "Project"**。
-3. 导入您的 GitHub 仓库 `RMT`。
-4. **关键配置**：
-   - **Framework Preset**: 选择 `Vite`。
-   - **Root Directory**: 选择 `frontend` (非常重要！)。
-   - **Environment Variables**: 展开此项，添加一个新的变量：
-     - **Key**: `VITE_API_BASE_URL`
-     - **Value**: 填入您在步骤 1 中拿到的**后端公网 URL** (例如 `https://rmt-backend-xxx.onrender.com`)。
-5. 点击 **"Deploy"**。
+- 已有 GitHub 账号，且 RMT 仓库已推送到 GitHub。
+- 已注册 [Zeabur](https://zeabur.com/) 账号（可用 GitHub 登录）。
 
 ---
 
-## 步骤 3：后续更新
+## 第 1 步：部署后端 (FastAPI / Docker)
 
-以后您只要在本地修改代码并 `git push`：
-1. **前端**：Vercel 会感知到 `frontend` 文件夹的变化并自动重新打包。
-2. **后端**：Render/Railway 会感知到 `backend` 或 `requirements.txt` 的变化并自动重启服务。
+1. 登录 Zeabur，进入控制台。
+2. 点击 **"创建项目 (Create Project)"**，选择一个服务器区域。
+3. 在项目页面中，点击 **"创建服务 (Create Service)"** → **"GitHub"** → 选择您的 `RMT` 仓库。
+4. 在弹出的 **"配置构建计划"** 窗口中：
+   - **根目录 (Root Directory)**：填入 `backend`
+   - **环境变量**：留空不填
+5. 点击 **"部署"**。
+6. 等待构建完成（约 3-5 分钟）。日志中出现 `Uvicorn running` 即表示成功。
+7. 进入该服务，点击顶部 **"域名 (Networking)"** 标签。
+8. 点击 **"生成域名"**，起一个名字（如 `rmt-api`）。
+9. **复制该域名**（如 `rmt-api.zeabur.app`），下一步要用。
 
-**现在您的平台已经拥有了真正的生产级部署架构！快去 Vercel 分享您的网址吧！**
+### 验证后端是否正常运行
+
+在浏览器中访问 `https://您的后端域名/docs`，如果看到 FastAPI 的绿色文档页面，说明后端已成功部署。
+
+---
+
+## 第 2 步：部署前端 (Vue / Vite)
+
+1. 在**同一个项目**中，再次点击 **"创建服务"** → **"GitHub"** → 选择同一个 `RMT` 仓库。
+2. 在 **"配置构建计划"** 窗口中：
+   - **根目录 (Root Directory)**：填入 `frontend`
+   - **环境变量**：
+     - **变量名 (Key)**：`VITE_API_BASE_URL`
+     - **变量值 (Value)**：`https://您的后端域名`（第 1 步中复制的域名，前面加 `https://`，末尾不要加 `/`）
+3. 点击 **"部署"**。
+4. 等待构建完成（约 2-3 分钟）。
+5. 进入前端服务，点击 **"域名"** 标签。
+6. 点击 **"生成域名"**，起一个名字（如 `rmt-analytics`）。
+7. 打开生成的域名，即可看到您的 RMT 平台主页！
+
+---
+
+## 第 3 步：后续更新
+
+以后您只需在本地修改代码并 `git push`，Zeabur 会自动检测到变化并重新部署对应的服务。
+
+---
+
+## 常见问题排查
+
+| 现象 | 原因 | 解决方案 |
+|------|------|----------|
+| 后端显示 Static (红色S) | 根目录未设置为 `backend` | 在"设置"中修改根目录为 `backend` |
+| 前端显示 Docker (蓝鲸) | `frontend` 中存在 Dockerfile | 已修复：删除了前端的 Dockerfile |
+| 前端图表不显示 | 环境变量未设置 | 检查前端服务的环境变量 `VITE_API_BASE_URL` |
+| 后端 Provisioning 超时 | Python 导入路径不匹配 | 已修复：Dockerfile 保持了 `backend` 包结构 |
+
+**完成！把前端域名分享给答辩老师，让他们直接在浏览器中体验您的研究成果！**
