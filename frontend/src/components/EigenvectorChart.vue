@@ -25,7 +25,7 @@ const renderChart = () => {
     (props.columnNames && props.columnNames.length > i) ? props.columnNames[i] : `Var ${i+1}`
   );
 
-  const barData = vector.map((val, i) => {
+  const barData = vector.map((val) => {
     return {
       value: val,
       itemStyle: {
