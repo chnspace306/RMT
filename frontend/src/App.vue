@@ -175,7 +175,6 @@
                     <span class="text-xs bg-iosOrange/20 px-2 py-1 rounded">{{ anomalies.length }} {{ lang === 'zh' ? '个' : 'found' }}</span>
                 </h3>
                 
-                <!-- Domain Selector -->
                 <div class="mb-3">
                     <select v-model="selectedDomain" class="w-full bg-[#1c1c1e] bg-opacity-80 border border-white/20 text-white/80 text-xs rounded p-1 focus:outline-none">
                         <option value="general">{{ lang === 'zh' ? '通用模型 (统计主成分)' : 'General (Principal Components)' }}</option>
@@ -208,17 +207,14 @@
                          :class="expandedEigenvector === index 
                            ? 'bg-white/10 border-iosOrange/40 shadow-[0_0_12px_rgba(255,159,10,0.15)]' 
                            : 'bg-white/5 border-white/10 hover:bg-white/10'">
-                        <!-- Eigenvalue Row (clickable to expand) -->
                         <div class="flex items-center justify-between p-2 cursor-pointer select-none group" @click="toggleEigenvectorDetail(index)">
                             <div class="flex items-center gap-2">
                                 <svg class="w-3 h-3 text-white/40 transition-transform duration-300 ease-out" :class="{'rotate-90': expandedEigenvector === index}" fill="currentColor" viewBox="0 0 20 20"><path d="M6 6l8 4-8 4V6z"/></svg>
                                 <span class="text-white/80 text-sm font-mono">λ_{{ index + 1 }}</span>
-                                <!-- Pulsing indicator when expanded -->
                                 <span v-if="expandedEigenvector === index" class="w-1.5 h-1.5 rounded-full bg-iosOrange animate-pulse"></span>
                             </div>
                             <span class="font-mono text-iosOrange font-bold group-hover:scale-105 transition-transform">{{ val.toFixed(4) }}</span>
                         </div>
-                        <!-- Expanded Eigenvector Detail Panel -->
                         <Transition name="eigvec-slide">
                         <div v-if="expandedEigenvector === index && getEigenvectorForAnomaly(index)" class="px-3 pb-3 pt-1 border-t border-white/10 bg-black/20">
                             <p class="text-[10px] text-white/40 mb-2 uppercase tracking-wider">{{ lang === 'zh' ? '特征向量成分权重 (Top-5)' : 'Eigenvector Component Weights (Top-5)' }}</p>
@@ -253,7 +249,6 @@
         <!-- Right Column: Visualization -->
         <div class="lg:col-span-8 xl:col-span-9 glass-panel p-2 flex flex-col relative overflow-hidden min-h-[600px] lg:h-[calc(100vh-140px)] lg:sticky lg:top-8">
             
-            <!-- Liquid Glass Switcher -->
             <div class="relative lg:absolute top-0 lg:top-4 left-0 lg:left-1/2 lg:transform lg:-translate-x-1/2 z-30 flex flex-wrap justify-center bg-black/40 backdrop-blur-xl border border-white/10 p-1 rounded-2xl lg:rounded-full shadow-[0_4px_30px_rgba(0,0,0,0.5)] mb-4 lg:mb-0 mx-2 lg:mx-0">
                 <button @click="currentView = 'spectrum'" :class="currentView === 'spectrum' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="flex-1 lg:flex-none px-3 lg:px-4 py-1.5 rounded-xl lg:rounded-full text-xs lg:text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '光谱' : 'Spectrum' }}</button>
                 <button @click="currentView = 'ipr'" :class="currentView === 'ipr' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="flex-1 lg:flex-none px-3 lg:px-4 py-1.5 rounded-xl lg:rounded-full text-xs lg:text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '局部化' : 'IPR' }}</button>
@@ -266,7 +261,6 @@
                     <h2 class="text-xl sm:text-2xl font-bold tracking-tight">
                         {{ currentModel === 'MP' ? (lang === 'zh' ? 'M-P 谱分布' : 'M-P Spectrum') : (lang === 'zh' ? 'Wigner 半圆律' : 'Wigner Semicircle') }}
                     </h2>
-                    <!-- Custom Apple-style Dropdown -->
                     <div v-if="uploadedDatasets.length > 0" class="relative flex items-center">
                         <button @click="toggleDropdown" 
                                 class="flex items-center justify-between px-3 sm:px-4 py-1.5 bg-black/30 backdrop-blur-xl hover:bg-white/10 text-white/90 text-xs sm:text-sm rounded-full border border-white/10 font-medium tracking-tight focus:outline-none focus:ring-1 focus:ring-iosBlue/50 cursor-pointer transition-all shadow-sm w-full sm:w-[240px]"
@@ -302,7 +296,6 @@
                 <p class="text-white/50 text-sm hidden sm:block">{{ lang === 'zh' ? '经验特征值分布 vs. 理论概率密度' : 'Empirical Distribution vs. Theoretical Density' }}</p>
             </div>
             
-            <!-- Spectrum View -->
             <div v-show="currentView === 'spectrum'" class="flex-grow flex flex-col h-full w-full relative">
                 <RmtChart 
                   ref="rmtChartRef"
@@ -320,7 +313,6 @@
                   @outlier-click="handleOutlierClick"
                 />
 
-                <!-- Eigenvector Full Chart -->
                 <Transition name="eigvec-slide">
                   <div v-if="expandedEigenvector !== null && getEigenvectorForAnomaly(expandedEigenvector)" class="w-full mt-2 border border-white/10 relative bg-black/30 backdrop-blur-md rounded-2xl overflow-hidden shadow-lg z-10 shrink-0 mb-2">
                     <div class="px-4 py-2 flex justify-between items-center bg-white/5 border-b border-white/10">
@@ -336,10 +328,9 @@
                 </Transition>
             </div>
 
-            <!-- Other Views (IPR, Heatmap, Rolling) ... -->
              <div v-if="currentView === 'ipr'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
                 <h2 class="text-xl font-bold mb-2 text-white/80">{{ lang === 'zh' ? '逆参与率 (IPR) 局部化' : 'IPR Localization' }}</h2>
-                <div class="w-full h-full bg-black/20 rounded-xl border border-white/10" id="ipr-chart-container">
+                <div class="w-full h-full bg-black/20 rounded-xl border border-white/10">
                     <div ref="iprChartContainer" class="w-full h-full"></div>
                 </div>
             </div>
@@ -352,7 +343,12 @@
                 <div v-else class="text-white/40 italic">上传数据集后生成热力图。</div>
             </div>
 
-            <!-- AI Sidebar Toggle -->
+            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
+                <h2 class="text-xl font-bold mb-4 text-white/80">{{ lang === 'zh' ? '系统性风险演化 (λ₁)' : 'Systemic Risk (λ₁)' }}</h2>
+                <button @click="runRollingAnalysis" class="px-6 py-2 bg-iosBlue rounded-full">开始分析</button>
+                <div id="rolling-chart-container" class="w-full h-full mt-4"></div>
+            </div>
+
             <div class="absolute top-4 right-4 flex gap-2 z-20">
                 <button @click="isAiSettingsOpen = true" class="p-1.5 bg-black/30 backdrop-blur border border-white/10 rounded-full text-white/50 hover:text-white shadow-sm">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
@@ -382,7 +378,6 @@
         </div>
     </div>
     
-    <!-- AI Settings Modal -->
     <div v-if="isAiSettingsOpen" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
         <div class="bg-[#1c1c1e] border border-white/10 p-6 rounded-2xl w-full max-w-[400px] shadow-2xl transition-all">
             <h3 class="text-xl font-bold text-white mb-4">{{ lang === 'zh' ? 'AI 设置' : 'AI Settings' }}</h3>
@@ -464,6 +459,11 @@ const loadExampleList = async () => {
     catch (e) { console.error("Example list error", e); }
 };
 
+const getDatasetProperty = (prop: string) => {
+    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    return ds ? ds[prop] : null;
+};
+
 const loadExample = async (name: string) => {
     loading.value = true;
     showExamples.value = false;
@@ -519,9 +519,11 @@ const handleFileUpload = async (e: Event) => {
         const data = await uploadMatrix(file, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
         updateDataWithResponse(file.name, data);
         
-        // Cache original lines for slider window slicing
         const ds = uploadedDatasets.value.find(d => d.name === file.name);
-        if (ds) ds.originalLines = lines;
+        if (ds) {
+            ds.originalLines = lines;
+            ds.originalFile = file;
+        }
 
     } catch (err: any) { alert("Upload Error: " + err.message); }
     finally { 
@@ -598,13 +600,23 @@ const deleteDataset = (n: string, e: Event) => {
 
 const dsHasFileConfigured = () => !!uploadedDatasets.value.find(d => d.name === currentDataset.value)?.originalLines;
 const formatTooltip = (v: number) => v.toString();
-const handleSliderChange = () => {}; // Re-processing can be added back if needed
+const handleSliderChange = () => {}; 
 const reprocessFile = () => {};
 
 const openAiDrawer = () => isAiDrawerOpen.value = true;
 const generateReport = async () => {
     if (!currentDataset.value) return;
     const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    
+    // 构建特征向量摘要
+    let eigenvectorSummary = '';
+    if (ds.outlier_eigenvectors && ds.outlier_eigenvectors.length > 0) {
+        eigenvectorSummary = ds.outlier_eigenvectors.map((oe: any) => {
+            const comps = oe.top_components.map((c: any) => `${c.column_name}: ${c.weight.toFixed(3)}`).join(', ');
+            return `λ_${oe.rank}=${oe.eigenvalue.toFixed(3)} [${comps}]`;
+        }).join('\n');
+    }
+
     isGenerating.value = true;
     aiReport.value = '';
     try {
@@ -612,11 +624,37 @@ const generateReport = async () => {
             dataset_name: ds.name, n: ds.n, p: ds.p, q: ds.q, sparsity: ds.sparsity,
             lambda_plus: ds.lambdaPlus, lambda_minus: ds.lambdaMinus,
             top_eigenvalues: ds.eigenvalues.slice(0, 5), outlier_count: ds.outlier_eigenvectors.length,
-            model_name: aiSettings.value.modelName, api_key: aiSettings.value.apiKey, base_url: aiSettings.value.baseUrl
+            model_name: aiSettings.value.modelName, api_key: aiSettings.value.apiKey, base_url: aiSettings.value.baseUrl,
+            eigenvector_summary: eigenvectorSummary
         }, (c) => aiReport.value += c);
     } finally { isGenerating.value = false; }
 };
 const renderedMarkdown = computed(() => marked.parse(aiReport.value || '点击下方生成报告...'));
+
+const runRollingAnalysis = async () => {
+    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    if (!ds || !ds.originalFile) return;
+    try {
+        const data = await fetchRollingData(ds.originalFile, 60, 1, "true");
+        // 这里可以继续完善滚动分析的图表逻辑
+        console.log(data);
+    } catch(e) {}
+};
+
+watch(currentView, (newView) => {
+    if (newView === 'ipr') {
+        nextTick(() => {
+            const ipr = getDatasetProperty('ipr') as number[];
+            if (!ipr || !iprChartContainer.value) return;
+            const chart = echarts.init(iprChartContainer.value);
+            chart.setOption({
+                xAxis: { type: 'value' },
+                yAxis: { type: 'value' },
+                series: [{ data: eigenvalues.value.map((v, i) => [v, ipr[i]]), type: 'scatter' }]
+            });
+        });
+    }
+});
 
 onMounted(() => {
     loadExampleList();
