@@ -343,25 +343,36 @@
                 <div v-else class="text-white/40 italic">上传数据集后生成热力图。</div>
             </div>
 
-            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-24 p-4 sm:p-8 overflow-hidden">
-                <div class="text-center mb-6">
-                    <h2 class="text-xl sm:text-2xl font-bold mb-2 text-white/90">{{ lang === 'zh' ? '系统性风险演化 (λ₁)' : 'Systemic Risk Evolution (λ₁)' }}</h2>
-                    <p class="text-white/40 text-xs sm:text-sm max-w-md mx-auto">{{ lang === 'zh' ? '通过滑动窗口分析最大特征值的波动，识别市场或环境系统性风险的爆发点。' : 'Identify systemic risk by analyzing the largest eigenvalue across a rolling time window.' }}</p>
+            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col h-full w-full p-6 sm:p-10 overflow-hidden">
+                <!-- Header Section -->
+                <div class="shrink-0 flex flex-col items-center text-center mt-12 mb-6">
+                    <h2 class="text-2xl sm:text-3xl font-extrabold mb-3 bg-clip-text text-transparent bg-gradient-to-r from-white to-white/40">
+                        {{ lang === 'zh' ? '系统性风险演化' : 'Systemic Risk Evolution' }}
+                    </h2>
+                    <p class="text-white/40 text-sm max-w-lg leading-relaxed">
+                        {{ lang === 'zh' ? '通过滑动窗口捕捉特征值的动态漂移，实时诊断高维系统的结构性变异。' : 'Capturing dynamic eigenvalue drift to diagnose structural changes in high-dimensional systems.' }}
+                    </p>
                 </div>
 
-                <div class="flex gap-4 mb-8">
+                <!-- Action Section -->
+                <div class="shrink-0 flex justify-center mb-6">
                     <button @click="runRollingAnalysis" :disabled="isRolling || !currentDataset" 
-                            class="px-8 py-3 bg-iosBlue hover:bg-blue-400 disabled:opacity-30 rounded-full font-bold text-white shadow-lg transition-all flex items-center gap-2">
-                        <span v-if="isRolling" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                        {{ isRolling ? (lang === 'zh' ? '计算中...' : 'Computing...') : (lang === 'zh' ? '开始滚动分析' : 'Run Rolling Analysis') }}
+                            class="group relative px-10 py-3.5 bg-iosBlue hover:scale-105 active:scale-95 disabled:opacity-30 rounded-2xl font-bold text-white shadow-[0_0_20px_rgba(0,122,255,0.3)] transition-all flex items-center gap-3">
+                        <div v-if="isRolling" class="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                        <span class="tracking-wide">{{ isRolling ? (lang === 'zh' ? '计算中...' : 'Analyzing...') : (lang === 'zh' ? '开启演化诊断' : 'Start Evolution Diagnosis') }}</span>
                     </button>
                 </div>
 
-                <!-- Chart Container with Fixed Height -->
-                <div class="w-full flex-grow bg-black/20 rounded-2xl border border-white/10 relative overflow-hidden min-h-[300px]">
-                    <div id="rolling-chart-container" class="w-full h-full"></div>
-                    <div v-if="!rollingData && !isRolling" class="absolute inset-0 flex items-center justify-center text-white/20 italic">
-                        {{ lang === 'zh' ? '准备就绪，点击上方按钮开始计算' : 'Ready. Click button above to start.' }}
+                <!-- Chart Container - Flexible and Scalable -->
+                <div class="flex-1 w-full bg-white/[0.03] backdrop-blur-md rounded-[2rem] border border-white/10 relative overflow-hidden shadow-inner group">
+                    <div id="rolling-chart-container" class="absolute inset-0 w-full h-full p-4"></div>
+                    
+                    <!-- Placeholder / Empty State -->
+                    <div v-if="!rollingData && !isRolling" class="absolute inset-0 flex flex-col items-center justify-center text-white/10">
+                        <svg class="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path>
+                        </svg>
+                        <span class="text-lg italic font-medium">{{ lang === 'zh' ? '等待指令中...' : 'Awaiting Input...' }}</span>
                     </div>
                 </div>
             </div>
