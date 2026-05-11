@@ -635,7 +635,7 @@ const runRollingAnalysis = async () => {
     const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
     if (!ds || !ds.originalFile) return;
     try {
-        const data = await fetchRollingData(ds.originalFile, 60, 1, "true");
+        const data = await fetchRollingData(ds.originalFile, 60, 1, true);
         // 这里可以继续完善滚动分析的图表逻辑
         console.log(data);
     } catch(e) {}
