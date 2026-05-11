@@ -12,9 +12,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 将 backend 文件夹的内容复制到 /app/backend/ 以保持 package 结构
-# 这样 main.py 中的 from backend.schemas import ... 才能正常工作
+# 将代码和数据集复制到镜像中
 COPY . ./backend/
+COPY Datasets/ ./backend/Datasets/
 
 # 暴露端口 (与 Zeabur 截图中的 8080 保持一致)
 EXPOSE 8080
