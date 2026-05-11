@@ -174,25 +174,26 @@ def health_check():
 
 @app.get("/api/rmt/examples")
 async def list_examples():
-    # 尝试多个可能的路径，确保在 Docker 容器中也能找到
-    possible_paths = [
-        os.path.join(os.getcwd(), "Datasets"),
+    # 终极探测逻辑
+    search_dirs = [
+        "Datasets",
+        "backend/Datasets",
+        "../Datasets",
         os.path.join(os.path.dirname(__file__), "Datasets"),
         "/app/backend/Datasets",
         "/app/Datasets"
     ]
     
-    datasets_dir = None
-    for p in possible_paths:
-        if os.path.exists(p) and os.path.isdir(p):
-            datasets_dir = p
-            break
-            
-    if not datasets_dir: 
-        print(f"DEBUG: Datasets directory not found. Checked: {possible_paths}")
-        return []
-        
-    return [f for f in os.listdir(datasets_dir) if f.endswith('.csv')]
+    for d in search_dirs:
+        abs_d = os.path.abspath(d)
+        if os.path.exists(abs_d) and os.path.isdir(abs_d):
+            files = [f for f in os.listdir(abs_d) if f.endswith('.csv')]
+            if files:
+                print(f"SUCCESS: Found Datasets at {abs_d}")
+                return files
+                
+    print(f"ERROR: Could not find any Datasets in {search_dirs}")
+    return []
 
 @app.post("/api/rmt/use_example", response_model=MPResponse)
 async def use_example(
@@ -201,19 +202,9 @@ async def use_example(
     fill_strategy: str = Form("zero"),
     standardize: str = Form("true")
 ):
-    possible_paths = [
-        os.path.join(os.getcwd(), "Datasets"),
-        os.path.join(os.path.dirname(__file__), "Datasets"),
-        "/app/backend/Datasets",
-        "/app/Datasets"
-    ]
+    search_dirs = ["Datasets", "backend/Datasets", "../Datasets", os.path.join(os.path.dirname(__file__), "Datasets"), "/app/backend/Datasets", "/app/Datasets"]
+    datasets_dir = next((os.path.abspath(d) for d in search_dirs if os.path.exists(os.path.abspath(d))), None)
     
-    datasets_dir = None
-    for p in possible_paths:
-        if os.path.exists(p) and os.path.isdir(p):
-            datasets_dir = p
-            break
-            
     if not datasets_dir:
         raise HTTPException(status_code=404, detail="Datasets directory not found")
         
