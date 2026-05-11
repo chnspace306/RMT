@@ -46,6 +46,19 @@ body {
   border-radius: 28px;
 }
 
+@media (max-width: 640px) {
+  .glass-panel {
+    border-radius: 16px;
+    padding: 16px !important;
+  }
+  .mesh-bg {
+    filter: brightness(0.7);
+  }
+  .blob {
+    filter: blur(40px);
+  }
+}
+
 #loading-overlay { background: rgba(0,0,0,0.7); backdrop-filter: blur(10px); z-index: 50; }
 .loader { border: 4px solid rgba(255,255,255,0.1); border-top-color: #0A84FF; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }

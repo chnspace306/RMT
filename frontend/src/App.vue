@@ -10,23 +10,23 @@
     </div>
 
     <!-- Navigation -->
-    <nav class="w-full px-8 py-6 flex justify-between items-center z-10">
-        <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-iosBlue to-purple-500 flex items-center justify-center font-bold">R</div>
-            <span class="text-xl font-semibold tracking-tight text-white/90">
+    <nav class="w-full px-4 sm:px-8 py-4 sm:py-6 flex justify-between items-center z-10">
+        <div class="flex items-center gap-2 sm:gap-3">
+            <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-iosBlue to-purple-500 flex items-center justify-center font-bold text-sm">R</div>
+            <span class="text-lg sm:text-xl font-semibold tracking-tight text-white/90">
                 {{ lang === 'zh' ? '随机矩阵分析' : 'RMT Analytics' }}
             </span>
         </div>
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2 sm:gap-4">
             <!-- Language Toggle -->
-            <div class="flex items-center gap-1 bg-black/30 rounded-full p-1 border border-white/10">
-                <button @click="lang = 'zh'" :class="lang === 'zh' ? 'bg-white/20 text-white shadow rounded-full px-3 py-1 text-xs transition' : 'text-white/50 hover:text-white px-3 py-1 text-xs transition'">中</button>
-                <button @click="lang = 'en'" :class="lang === 'en' ? 'bg-white/20 text-white shadow rounded-full px-3 py-1 text-xs transition' : 'text-white/50 hover:text-white px-3 py-1 text-xs transition'">EN</button>
+            <div class="flex items-center gap-1 bg-black/30 rounded-full p-1 border border-white/10 scale-90 sm:scale-100">
+                <button @click="lang = 'zh'" :class="lang === 'zh' ? 'bg-white/20 text-white shadow rounded-full px-2 sm:px-3 py-1 text-xs transition' : 'text-white/50 hover:text-white px-2 sm:px-3 py-1 text-xs transition'">中</button>
+                <button @click="lang = 'en'" :class="lang === 'en' ? 'bg-white/20 text-white shadow rounded-full px-2 sm:px-3 py-1 text-xs transition' : 'text-white/50 hover:text-white px-2 sm:px-3 py-1 text-xs transition'">EN</button>
             </div>
             
-            <button @click="rmtChartRef?.exportChart()" class="glass-panel px-6 py-2 text-sm font-medium hover:bg-white/10 transition duration-300 flex items-center gap-2">
+            <button @click="rmtChartRef?.exportChart()" class="glass-panel px-3 sm:px-6 py-2 text-sm font-medium hover:bg-white/10 transition duration-300 flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                {{ lang === 'zh' ? '导出图表' : 'Export Chart' }}
+                <span class="hidden sm:inline">{{ lang === 'zh' ? '导出图表' : 'Export Chart' }}</span>
             </button>
         </div>
     </nav>
@@ -243,22 +243,22 @@
         <div class="lg:col-span-8 xl:col-span-9 glass-panel p-2 flex flex-col relative overflow-hidden min-h-[600px] lg:h-[calc(100vh-140px)] lg:sticky lg:top-8">
             
             <!-- Liquid Glass Switcher -->
-            <div class="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 flex bg-black/40 backdrop-blur-xl border border-white/10 p-1 rounded-full shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
-                <button @click="currentView = 'spectrum'" :class="currentView === 'spectrum' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '光谱分布' : 'Spectrum' }}</button>
-                <button @click="currentView = 'ipr'" :class="currentView === 'ipr' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? 'IPR定位' : 'Localization' }}</button>
-                <button @click="currentView = 'heatmap'" :class="currentView === 'heatmap' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '降噪矩阵' : 'Heatmap' }}</button>
-                <button @click="currentView = 'rolling'" :class="currentView === 'rolling' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '风险演化' : 'Rolling Risk' }}</button>
+            <div class="relative lg:absolute top-0 lg:top-4 left-0 lg:left-1/2 lg:transform lg:-translate-x-1/2 z-30 flex flex-wrap justify-center bg-black/40 backdrop-blur-xl border border-white/10 p-1 rounded-2xl lg:rounded-full shadow-[0_4px_30px_rgba(0,0,0,0.5)] mb-4 lg:mb-0 mx-2 lg:mx-0">
+                <button @click="currentView = 'spectrum'" :class="currentView === 'spectrum' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="flex-1 lg:flex-none px-3 lg:px-4 py-1.5 rounded-xl lg:rounded-full text-xs lg:text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '光谱' : 'Spectrum' }}</button>
+                <button @click="currentView = 'ipr'" :class="currentView === 'ipr' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="flex-1 lg:flex-none px-3 lg:px-4 py-1.5 rounded-xl lg:rounded-full text-xs lg:text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '局部化' : 'IPR' }}</button>
+                <button @click="currentView = 'heatmap'" :class="currentView === 'heatmap' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="flex-1 lg:flex-none px-3 lg:px-4 py-1.5 rounded-xl lg:rounded-full text-xs lg:text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '矩阵' : 'Heatmap' }}</button>
+                <button @click="currentView = 'rolling'" :class="currentView === 'rolling' ? 'bg-white/20 shadow-md text-white' : 'text-white/50 hover:text-white'" class="flex-1 lg:flex-none px-3 lg:px-4 py-1.5 rounded-xl lg:rounded-full text-xs lg:text-sm font-medium transition-all duration-300">{{ lang === 'zh' ? '演化' : 'Rolling' }}</button>
             </div>
 
-            <div class="absolute top-4 left-6 z-10 pointer-events-none flex flex-col gap-2">
-                <div class="flex items-center pointer-events-auto">
-                    <h2 class="text-2xl font-bold tracking-tight">
-                        {{ currentModel === 'MP' ? (lang === 'zh' ? 'Marchenko-Pastur 谱分布' : 'Marchenko-Pastur Spectrum') : (lang === 'zh' ? 'Wigner 半圆律谱分布' : 'Wigner Semicircle Spectrum') }}
+            <div class="relative lg:absolute top-0 lg:top-4 left-0 lg:left-6 z-10 px-4 lg:px-0 flex flex-col gap-1 sm:gap-2">
+                <div class="flex flex-col sm:flex-row sm:items-center pointer-events-auto gap-2">
+                    <h2 class="text-xl sm:text-2xl font-bold tracking-tight">
+                        {{ currentModel === 'MP' ? (lang === 'zh' ? 'M-P 谱分布' : 'M-P Spectrum') : (lang === 'zh' ? 'Wigner 半圆律' : 'Wigner Semicircle') }}
                     </h2>
                     <!-- Custom Apple-style Dropdown -->
-                    <div v-if="uploadedDatasets.length > 0" class="ml-4 relative flex items-center">
+                    <div v-if="uploadedDatasets.length > 0" class="relative flex items-center">
                         <button @click="toggleDropdown" 
-                                class="flex items-center justify-between px-4 py-1.5 bg-black/30 backdrop-blur-xl hover:bg-white/10 text-white/90 text-sm rounded-full border border-white/10 font-medium tracking-tight focus:outline-none focus:ring-1 focus:ring-iosBlue/50 cursor-pointer transition-all shadow-sm w-[240px]"
+                                class="flex items-center justify-between px-3 sm:px-4 py-1.5 bg-black/30 backdrop-blur-xl hover:bg-white/10 text-white/90 text-xs sm:text-sm rounded-full border border-white/10 font-medium tracking-tight focus:outline-none focus:ring-1 focus:ring-iosBlue/50 cursor-pointer transition-all shadow-sm w-full sm:w-[240px]"
                                 :title="lang === 'zh' ? '选择数据集' : 'Select Dataset'">
                             <span class="truncate">{{ currentDataset || (lang === 'zh' ? '模拟生成中心...' : 'Simulation Hub...') }}</span>
                             <svg class="w-3 h-3 ml-2 text-white/50 shrink-0 transition-transform duration-200" :class="{'rotate-180': isDropdownOpen}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
