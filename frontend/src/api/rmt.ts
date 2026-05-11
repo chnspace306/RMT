@@ -99,3 +99,23 @@ export async function fetchHeatmapRebuild(file: File, topK: number = -1, scale: 
   if (!response.ok) throw new Error('Failed to rebuild heatmap');
   return response.json();
 }
+export async function fetchExamples() {
+  const response = await fetch(`${API_BASE_URL}/api/rmt/examples`);
+  if (!response.ok) throw new Error('Failed to fetch examples');
+  return response.json();
+}
+
+export async function useExample(name: string, scale: number, fillStrategy: string = 'zero', standardize: boolean = true) {
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('scale', scale.toString());
+  formData.append('fill_strategy', fillStrategy);
+  formData.append('standardize', standardize.toString());
+
+  const response = await fetch(`${API_BASE_URL}/api/rmt/use_example`, {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) throw new Error('Failed to load example dataset');
+  return response.json();
+}

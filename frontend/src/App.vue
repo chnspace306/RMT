@@ -38,17 +38,36 @@
         <div class="lg:col-span-4 xl:col-span-3 flex flex-col gap-6">
             
             <!-- Real Upload Area (Trigger File Input) -->
-            <div @click="triggerUpload" class="glass-panel p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/10 transition group border-dashed border-2 border-white/20 relative">
-                <input type="file" ref="fileInput" accept=".csv" class="hidden" @click.stop @change="handleFileUpload">
-                <svg class="w-12 h-12 text-white/60 mb-4 group-hover:text-iosBlue transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                <h3 class="font-medium text-lg text-white">{{ lang === 'zh' ? '上传真实矩阵数据' : 'Upload Real Matrix' }}</h3>
-                <p class="text-white/50 text-xs mt-2">{{ lang === 'zh' ? 'CSV 格式 (列=特征)' : 'CSV Format (Columns=Features)' }}</p>
+            <div class="glass-panel p-6 flex flex-col items-center justify-center text-center transition group border-dashed border-2 border-white/20 relative">
+                <div @click="triggerUpload" class="w-full h-full cursor-pointer flex flex-col items-center">
+                    <input type="file" ref="fileInput" accept=".csv" class="hidden" @click.stop @change="handleFileUpload">
+                    <svg class="w-12 h-12 text-white/60 mb-4 group-hover:text-iosBlue transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                    <h3 class="font-medium text-lg text-white">{{ lang === 'zh' ? '上传真实矩阵数据' : 'Upload Real Matrix' }}</h3>
+                    <p class="text-white/50 text-xs mt-2">{{ lang === 'zh' ? 'CSV 格式 (列=特征)' : 'CSV Format (Columns=Features)' }}</p>
+                </div>
+
+                <!-- Example Dataset Quick Link -->
+                <div class="mt-6 pt-6 border-t border-white/10 w-full">
+                    <button @click="showExamples = !showExamples" class="w-full flex items-center justify-center gap-2 py-2 px-4 bg-white/5 hover:bg-white/10 rounded-xl text-sm text-iosBlue transition">
+                        <span>✨ {{ lang === 'zh' ? '使用预置测试集' : 'Use Test Dataset' }}</span>
+                        <svg class="w-4 h-4 transition-transform" :class="{'rotate-180': showExamples}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    
+                    <div v-if="showExamples" class="mt-3 space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                        <div v-for="ex in exampleList" :key="ex" 
+                             @click="loadExample(ex)"
+                             class="text-left px-3 py-2 bg-black/20 hover:bg-iosBlue/20 rounded-lg text-xs text-white/70 hover:text-white cursor-pointer transition-colors border border-white/5">
+                             📄 {{ ex.replace('.csv', '') }}
+                        </div>
+                        <div v-if="exampleList.length === 0" class="text-xs text-white/30 italic py-2">{{ lang === 'zh' ? '未找到测试集...' : 'No test sets found...' }}</div>
+                    </div>
+                </div>
             </div>
 
             <!-- Model Switcher -->
             <div class="glass-panel p-2 flex bg-black/20 rounded-full mx-2">
-                <button @click="switchModel('MP')" :class="currentModel === 'MP' ? 'flex-1 py-2 text-sm font-medium rounded-full bg-white/20 shadow text-white transition' : 'flex-1 py-2 text-sm font-medium rounded-full text-white/60 hover:text-white transition'">{{ lang === 'zh' ? 'Marchenko-Pastur 分布' : 'Marchenko-Pastur' }}</button>
-                <button @click="switchModel('WIGNER')" :class="currentModel === 'WIGNER' ? 'flex-1 py-2 text-sm font-medium rounded-full bg-white/20 shadow text-white transition' : 'flex-1 py-2 text-sm font-medium rounded-full text-white/60 hover:text-white transition'">{{ lang === 'zh' ? 'Wigner 半圆律' : 'Wigner Semicircle' }}</button>
+                <button @click="switchModel('MP')" :class="currentModel === 'MP' ? 'flex-1 py-2 text-sm font-medium rounded-full bg-white/20 shadow text-white transition' : 'flex-1 py-2 text-sm font-medium rounded-full text-white/60 hover:text-white transition'">{{ lang === 'zh' ? 'M-P 分布' : 'M-P' }}</button>
+                <button @click="switchModel('WIGNER')" :class="currentModel === 'WIGNER' ? 'flex-1 py-2 text-sm font-medium rounded-full bg-white/20 shadow text-white transition' : 'flex-1 py-2 text-sm font-medium rounded-full text-white/60 hover:text-white transition'">{{ lang === 'zh' ? 'Wigner 半圆' : 'Wigner' }}</button>
             </div>
 
             <!-- Parameters Panel -->
@@ -199,7 +218,7 @@
                             </div>
                             <span class="font-mono text-iosOrange font-bold group-hover:scale-105 transition-transform">{{ val.toFixed(4) }}</span>
                         </div>
-                        <!-- Expanded Eigenvector Detail Panel with slide animation -->
+                        <!-- Expanded Eigenvector Detail Panel -->
                         <Transition name="eigvec-slide">
                         <div v-if="expandedEigenvector === index && getEigenvectorForAnomaly(index)" class="px-3 pb-3 pt-1 border-t border-white/10 bg-black/20">
                             <p class="text-[10px] text-white/40 mb-2 uppercase tracking-wider">{{ lang === 'zh' ? '特征向量成分权重 (Top-5)' : 'Eigenvector Component Weights (Top-5)' }}</p>
@@ -207,9 +226,7 @@
                                  <div v-for="(comp, ci) in getEigenvectorForAnomaly(index).top_components" :key="ci" 
                                       class="flex items-center gap-2 eigvec-bar-enter"
                                       :style="{ animationDelay: (Number(ci) * 80) + 'ms' }">
-                                     <!-- Column name -->
                                      <span class="text-[11px] text-white/70 w-[90px] truncate shrink-0" :title="comp.column_name">{{ comp.column_name }}</span>
-                                     <!-- Visual bar with animated fill -->
                                      <div class="flex-1 h-4 bg-black/30 rounded-sm relative overflow-hidden">
                                          <div class="absolute top-0 left-0 h-full rounded-sm eigvec-bar-fill"
                                               :class="comp.weight >= 0 ? 'bg-gradient-to-r from-emerald-500/80 to-emerald-400/60' : 'bg-gradient-to-r from-rose-500/80 to-rose-400/60'"
@@ -223,14 +240,8 @@
                             </div>
                             <div class="mt-2 flex gap-3 text-[9px] text-white/30">
                                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-emerald-500/80"></span>{{ lang === 'zh' ? '正相关' : 'Positive' }}</span>
-                                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-rose-500/80"></span>{{ lang === 'zh' ? '负相关 (对抗)' : 'Negative (opposing)' }}</span>
+                                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-rose-500/80"></span>{{ lang === 'zh' ? '负相关' : 'Negative' }}</span>
                             </div>
-                        </div>
-                        </Transition>
-                        <!-- No eigenvector data message -->
-                        <Transition name="eigvec-slide">
-                        <div v-if="expandedEigenvector === index && !getEigenvectorForAnomaly(index)" class="px-3 pb-3 pt-1 border-t border-white/10 bg-black/20">
-                            <p class="text-[10px] text-white/30 italic">{{ lang === 'zh' ? '未提取特征向量（仅上传数据集时可用）' : 'No eigenvector data (available for uploaded datasets only)' }}</p>
                         </div>
                         </Transition>
                     </div>
@@ -264,211 +275,123 @@
                             <svg class="w-3 h-3 ml-2 text-white/50 shrink-0 transition-transform duration-200" :class="{'rotate-180': isDropdownOpen}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                         </button>
 
-                        <!-- Invisible Overlay for closing -->
                         <div v-if="isDropdownOpen" @click="closeDropdown" class="fixed inset-0 z-40"></div>
-
-                        <!-- Dropdown Menu Container -->
-                        <div v-if="isDropdownOpen" 
-                             class="absolute top-10 left-0 w-[240px] z-50 bg-[#1c1c1e]/90 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col p-1.5">
-                            
-                            <div class="max-h-[240px] overflow-y-auto pr-1" style="scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.2) transparent;">
-                                <!-- Simulation Hub Option -->
-                                <div @click="selectDataset('')" 
-                                     class="px-3 py-2 text-sm text-white/60 hover:bg-white/10 rounded-xl cursor-pointer transition-colors flex items-center gap-2 mb-1">
+                        <div v-if="isDropdownOpen" class="absolute top-10 left-0 w-[240px] z-50 bg-[#1c1c1e]/90 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col p-1.5">
+                            <div class="max-h-[240px] overflow-y-auto pr-1 custom-scrollbar">
+                                <div @click="selectDataset('')" class="px-3 py-2 text-sm text-white/60 hover:bg-white/10 rounded-xl cursor-pointer flex items-center gap-2 mb-1">
                                      <div class="w-2 h-2 rounded-full" :class="!currentDataset ? 'bg-iosBlue' : 'bg-transparent border border-white/30'"></div>
                                      {{ lang === 'zh' ? '模拟生成中心...' : 'Simulation Hub...' }}
                                 </div>
-                                
                                 <div class="h-px bg-white/10 mx-2 mb-1"></div>
-
-                                <!-- Uploaded Datasets -->
-                                <div v-for="ds in uploadedDatasets" :key="ds.name" 
-                                     @click="selectDataset(ds.name)"
-                                     class="px-3 py-2 text-sm text-white/90 hover:bg-white/10 rounded-xl cursor-pointer transition-colors flex flex-col gap-0.5 group relative">
+                                <div v-for="ds in uploadedDatasets" :key="ds.name" @click="selectDataset(ds.name)" class="px-3 py-2 text-sm text-white/90 hover:bg-white/10 rounded-xl cursor-pointer transition-colors flex flex-col gap-0.5 group relative">
                                     <div class="flex items-center justify-between">
                                         <div class="flex items-center gap-2 overflow-hidden pr-2">
                                             <div class="w-2 h-2 rounded-full shrink-0" :class="currentDataset === ds.name ? 'bg-iosGreen' : 'bg-transparent border border-white/30'"></div>
                                             <span class="font-medium truncate">{{ ds.name }}</span>
                                         </div>
-                                        <button @click="(e) => deleteDataset(ds.name, e)" class="opacity-0 group-hover:opacity-100 absolute right-2 p-1 hover:bg-white/20 rounded text-white/40 hover:text-iosRed transition-all" :title="lang === 'zh' ? '删除数据集' : 'Remove dataset'">
+                                        <button @click="(e) => deleteDataset(ds.name, e)" class="opacity-0 group-hover:opacity-100 absolute right-2 p-1 hover:bg-white/20 rounded text-white/40 hover:text-iosRed transition-all">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                         </button>
                                     </div>
-                                    <span class="text-xs text-white/40 font-mono ml-4">q={{ ds.q.toFixed(2) }} | {{ lang === 'zh' ? '稀疏度=' : 'sparsity=' }}{{ (ds.sparsity*100).toFixed(0) }}%</span>
+                                    <span class="text-xs text-white/40 font-mono ml-4">q={{ ds.q.toFixed(2) }} | {{ ds.p }}x{{ ds.n }}</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <p class="text-white/50 text-sm">{{ lang === 'zh' ? '经验特征值分布 vs. 理论概率密度' : 'Empirical Distribution vs. Theoretical Density' }}</p>
+                <p class="text-white/50 text-sm hidden sm:block">{{ lang === 'zh' ? '经验特征值分布 vs. 理论概率密度' : 'Empirical Distribution vs. Theoretical Density' }}</p>
             </div>
             
             <!-- Spectrum View -->
             <div v-show="currentView === 'spectrum'" class="flex-grow flex flex-col h-full w-full relative">
                 <RmtChart 
                   ref="rmtChartRef"
-              v-if="eigenvalues.length > 0"
-              :model="currentModel"
-              :eigenvalues="eigenvalues"
-              :theoreticalCurve="theoreticalCurve"
-              :bins="bins"
-              :lambdaPlus="lambdaPlus"
-              :lambdaMinus="lambdaMinus"
-              :normType="normType"
-              :lang="lang"
-              :highlightAnomalyIndex="expandedEigenvector"
-              @anomalies="handleAnomalies"
-              @outlier-click="handleOutlierClick"
-            />
-
-            <!-- Eigenvector Full Chart (Slide up when expanded) -->
-            <Transition name="eigvec-slide">
-              <div v-if="expandedEigenvector !== null && getEigenvectorForAnomaly(expandedEigenvector)" class="w-full mt-2 border border-white/10 relative bg-black/30 backdrop-blur-md rounded-2xl overflow-hidden shadow-lg z-10 shrink-0 mb-2">
-                <div class="px-4 py-2 flex justify-between items-center bg-white/5 border-b border-white/10">
-                   <h3 class="text-sm font-bold text-white/80 font-mono">
-                     {{ lang === 'zh' ? '完整特征向量 Loadings (λ=' + getEigenvectorForAnomaly(expandedEigenvector).eigenvalue.toFixed(4) + ')' : 'Full Eigenvector Loadings (λ=' + getEigenvectorForAnomaly(expandedEigenvector).eigenvalue.toFixed(4) + ')' }}
-                   </h3>
-                   <button @click="expandedEigenvector = null" class="text-white/40 hover:text-white transition p-1 rounded-full hover:bg-white/10">
-                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                   </button>
-                </div>
-                <EigenvectorChart 
-                  :eigenvector="getEigenvectorForAnomaly(expandedEigenvector)"
-                  :columnNames="columnNames"
+                  v-if="eigenvalues.length > 0"
+                  :model="currentModel"
+                  :eigenvalues="eigenvalues"
+                  :theoreticalCurve="theoreticalCurve"
+                  :bins="bins"
+                  :lambdaPlus="lambdaPlus"
+                  :lambdaMinus="lambdaMinus"
+                  :normType="normType"
                   :lang="lang"
+                  :highlightAnomalyIndex="expandedEigenvector"
+                  @anomalies="handleAnomalies"
+                  @outlier-click="handleOutlierClick"
                 />
-              </div>
-            </Transition>
-            </div>
 
-            <!-- IPR Localization View -->
-            <div v-if="currentView === 'ipr'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
-                <h2 class="text-xl font-bold mb-2 text-white/80">{{ lang === 'zh' ? '逆参与率 (IPR) 局部化定位' : 'Inverse Participation Ratio (IPR)' }}</h2>
-                <p class="text-white/40 text-xs mb-4">{{ lang === 'zh' ? '高 IPR 代表局部化状态（异常信号），低 IPR 代表全局噪声。点击图中异常点可查看其特征向量成分。' : 'High IPR signals localized states (outliers), Low IPR signals noise (bulk). Click points to view details.' }}</p>
-                <div v-if="getDatasetProperty('ipr')" class="w-full h-full bg-black/20 rounded-xl border border-white/10" id="ipr-chart-container">
-                    <div ref="iprChartContainer" class="w-full h-full"></div>
-                </div>
-                <div v-else class="text-white/40 italic">
-                    {{ lang === 'zh' ? '请先上传数据以计算 IPR。' : 'Please upload data to compute IPR.' }}
-                </div>
-                <!-- Eigenvector Full Chart under IPR -->
+                <!-- Eigenvector Full Chart -->
                 <Transition name="eigvec-slide">
-                  <div v-if="expandedEigenvector !== null && getEigenvectorForAnomaly(expandedEigenvector) && currentView === 'ipr'" class="w-full mt-4 border border-white/10 relative bg-black/30 backdrop-blur-md rounded-2xl overflow-hidden shadow-lg z-10 shrink-0 mb-2">
+                  <div v-if="expandedEigenvector !== null && getEigenvectorForAnomaly(expandedEigenvector)" class="w-full mt-2 border border-white/10 relative bg-black/30 backdrop-blur-md rounded-2xl overflow-hidden shadow-lg z-10 shrink-0 mb-2">
                     <div class="px-4 py-2 flex justify-between items-center bg-white/5 border-b border-white/10">
                        <h3 class="text-sm font-bold text-white/80 font-mono">
-                         {{ lang === 'zh' ? '特征向量成分 (λ=' + getEigenvectorForAnomaly(expandedEigenvector).eigenvalue.toFixed(4) + ')' : 'Eigenvector Components (λ=' + getEigenvectorForAnomaly(expandedEigenvector).eigenvalue.toFixed(4) + ')' }}
+                         {{ lang === 'zh' ? '特征向量 Loading (λ=' + getEigenvectorForAnomaly(expandedEigenvector).eigenvalue.toFixed(4) + ')' : 'Eigenvector Loading (λ=' + getEigenvectorForAnomaly(expandedEigenvector).eigenvalue.toFixed(4) + ')' }}
                        </h3>
                        <button @click="expandedEigenvector = null" class="text-white/40 hover:text-white transition p-1 rounded-full hover:bg-white/10">
                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                        </button>
                     </div>
-                    <EigenvectorChart 
-                      :eigenvector="getEigenvectorForAnomaly(expandedEigenvector)"
-                      :columnNames="columnNames"
-                      :lang="lang"
-                    />
+                    <EigenvectorChart :eigenvector="getEigenvectorForAnomaly(expandedEigenvector)" :columnNames="columnNames" :lang="lang" />
                   </div>
                 </Transition>
             </div>
 
-            <!-- Heatmap View -->
+            <!-- Other Views (IPR, Heatmap, Rolling) ... -->
+             <div v-if="currentView === 'ipr'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
+                <h2 class="text-xl font-bold mb-2 text-white/80">{{ lang === 'zh' ? '逆参与率 (IPR) 局部化' : 'IPR Localization' }}</h2>
+                <div class="w-full h-full bg-black/20 rounded-xl border border-white/10" id="ipr-chart-container">
+                    <div ref="iprChartContainer" class="w-full h-full"></div>
+                </div>
+            </div>
+
             <div v-if="currentView === 'heatmap'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
-                <h2 class="text-xl font-bold mb-4 text-white/80">{{ lang === 'zh' ? 'RMT 降噪相关性矩阵 (层析分析)' : 'RMT Cleaned Correlation Heatmap' }}</h2>
+                <h2 class="text-xl font-bold mb-4 text-white/80">{{ lang === 'zh' ? 'RMT 降噪相关性矩阵' : 'RMT Cleaned Heatmap' }}</h2>
                 <div v-if="getDatasetProperty('cleaned_heatmap_base64')" class="w-full flex flex-col items-center h-full min-h-0">
-                    <div class="mb-4 flex items-center gap-4 bg-black/30 px-6 py-3 rounded-full border border-white/10">
-                        <span class="text-white/70 text-sm">{{ lang === 'zh' ? '仅保留前 N 个核心信号:' : 'Keep Top N Signals:' }}</span>
-                        <input type="range" min="-1" :max="anomalies.length" v-model.number="heatmapTopK" @input="debouncedHeatmapRebuild" class="w-48 cursor-pointer">
-                        <span class="text-white font-mono font-bold w-12 text-center">{{ heatmapTopK === -1 ? (lang === 'zh' ? '全部' : 'All') : heatmapTopK }}</span>
-                        <svg v-if="isRebuildingHeatmap" class="animate-spin h-5 w-5 text-iosBlue" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    </div>
-                    <div class="w-full flex-grow overflow-hidden rounded-xl border border-white/10 shadow-2xl flex items-center justify-center bg-black/20">
-                        <img :src="(getDatasetProperty('cleaned_heatmap_base64') as string) || ''" class="max-w-full max-h-full object-contain" alt="Correlation Heatmap">
-                    </div>
+                    <img :src="(getDatasetProperty('cleaned_heatmap_base64') as string)" class="max-w-full max-h-full object-contain rounded-xl border border-white/10">
                 </div>
-                <div v-else class="text-white/40 italic">
-                    {{ lang === 'zh' ? '该数据集没有生成热力图，请重新上传以生成。' : 'No heatmap generated for this dataset. Please re-upload.' }}
-                </div>
+                <div v-else class="text-white/40 italic">上传数据集后生成热力图。</div>
             </div>
 
-            <!-- Rolling View -->
-            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
-                <h2 class="text-xl font-bold mb-4 text-white/80">{{ lang === 'zh' ? '系统性风险演化 (最高共振频段 λ₁)' : 'Systemic Risk Evolution (λ₁)' }}</h2>
-                <div class="flex flex-col items-center gap-4 bg-black/20 p-8 rounded-xl border border-white/10">
-                    <p class="text-white/60 text-sm text-center max-w-md">
-                        {{ lang === 'zh' ? '沿着时间轴动态滚动计算最大特征值，监测系统性风险的爆发。' : 'Rolling computation of the largest eigenvalue along the time axis to monitor systemic risk.' }}
-                    </p>
-                    <button @click="runRollingAnalysis" :disabled="!currentDataset || isRolling" class="px-6 py-2 bg-iosBlue rounded-full font-medium hover:bg-blue-600 transition disabled:opacity-50 flex items-center gap-2">
-                        <svg v-if="isRolling" class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        {{ lang === 'zh' ? '开始滚动计算' : 'Run Rolling Analysis' }}
-                    </button>
-                </div>
-                <div v-if="rollingData" class="w-full mt-4 h-[400px]" id="rolling-chart-container"></div>
-            </div>
-
-            <!-- AI Button and Settings -->
+            <!-- AI Sidebar Toggle -->
             <div class="absolute top-4 right-4 flex gap-2 z-20">
-                <button @click="isAiSettingsOpen = true" class="p-1.5 bg-black/30 backdrop-blur border border-white/10 rounded-full hover:bg-white/10 transition text-white/50 hover:text-white shadow-sm" :title="lang === 'zh' ? 'AI 提供商设置' : 'AI Provider Settings'">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <button @click="isAiSettingsOpen = true" class="p-1.5 bg-black/30 backdrop-blur border border-white/10 rounded-full text-white/50 hover:text-white shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
                 </button>
-                <button @click="openAiDrawer" class="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-indigo-500/80 to-purple-600/80 hover:from-indigo-500 hover:to-purple-600 border border-purple-400/30 text-white rounded-full text-sm font-medium shadow-[0_0_15px_rgba(124,58,237,0.3)] transition-all">
-                    <span>✨ {{ lang === 'zh' ? 'AI 深度分析' : 'AI Insights' }}</span>
+                <button @click="openAiDrawer" class="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-indigo-500/80 to-purple-600/80 text-white rounded-full text-sm font-medium shadow-lg transition-all">
+                    <span>✨ {{ lang === 'zh' ? 'AI 洞察' : 'AI Insights' }}</span>
                 </button>
             </div>
         </div>
-
     </main>
 
-    <!-- AI Settings Modal -->
-    <div v-if="isAiSettingsOpen" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in-down">
-        <div class="bg-[#1c1c1e] border border-white/10 p-6 rounded-2xl w-[400px] shadow-2xl transition-all">
-            <h3 class="text-xl font-bold text-white mb-4">{{ lang === 'zh' ? 'AI 模型提供商设置' : 'AI Provider Settings' }}</h3>
-            <div class="flex flex-col gap-4">
-                <div>
-                    <label class="text-white/70 text-sm mb-1 block">{{ lang === 'zh' ? '接口地址 (Base URL)' : 'Base URL' }}</label>
-                    <input v-model="aiSettings.baseUrl" type="text" class="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-white text-sm" placeholder="http://localhost:11434/v1">
-                </div>
-                <div>
-                    <label class="text-white/70 text-sm mb-1 block">{{ lang === 'zh' ? 'API Key (如果需要)' : 'API Key (if required)' }}</label>
-                    <input v-model="aiSettings.apiKey" type="password" class="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-white text-sm" placeholder="sk-...">
-                </div>
-                <div>
-                    <label class="text-white/70 text-sm mb-1 block">{{ lang === 'zh' ? '模型名称 (Model Name)' : 'Model Name' }}</label>
-                    <input v-model="aiSettings.modelName" type="text" class="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-white text-sm" placeholder="qwen-plus, deepseek-r1...">
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end gap-3">
-                <button @click="isAiSettingsOpen = false" class="px-4 py-2 rounded-lg bg-iosBlue text-white hover:bg-blue-600 transition text-sm font-medium">{{ lang === 'zh' ? '保存并关闭' : 'Save & Close' }}</button>
-            </div>
-        </div>
-    </div>
-
     <!-- AI Insights Drawer -->
-    <div class="fixed top-0 right-0 bottom-0 w-[450px] bg-[#1c1c1e]/95 backdrop-blur-3xl border-l border-white/10 shadow-2xl z-50 transition-transform duration-300 transform flex flex-col"
+    <div class="fixed top-0 right-0 bottom-0 w-full sm:w-[450px] bg-[#1c1c1e]/95 backdrop-blur-3xl border-l border-white/10 shadow-2xl z-50 transition-transform duration-300 transform flex flex-col"
          :class="isAiDrawerOpen ? 'translate-x-0' : 'translate-x-full'">
         <div class="p-5 border-b border-white/10 flex justify-between items-center bg-black/20">
-            <h3 class="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-400 flex items-center gap-2">
-                {{ lang === 'zh' ? '✨ 深度 AI 智能分析' : '✨ Deep AI Analysis' }}
-            </h3>
-            <button @click="isAiDrawerOpen = false" class="text-white/50 hover:text-white p-1 rounded-full bg-white/5 hover:bg-white/10 transition">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">✨ {{ lang === 'zh' ? '深度 AI 分析' : 'Deep AI Analysis' }}</h3>
+            <button @click="isAiDrawerOpen = false" class="text-white/50 hover:text-white p-1 rounded-full bg-white/5 transition">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
-        
-        <div class="flex-1 overflow-y-auto p-6 prose prose-invert prose-sm max-w-none custom-scrollbar" v-html="renderedMarkdown">
-        </div>
-        
+        <div class="flex-1 overflow-y-auto p-6 prose prose-invert prose-sm max-w-none custom-scrollbar" v-html="renderedMarkdown"></div>
         <div class="p-4 border-t border-white/10 bg-black/30">
-            <button @click="generateReport" :disabled="isGenerating || !currentDataset" 
-                    class="w-full py-3 rounded-xl font-medium transition-all shadow-lg flex justify-center items-center gap-2"
-                    :class="(isGenerating || !currentDataset) ? 'bg-white/10 text-white/30 cursor-not-allowed' : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white'">
-                <svg v-if="isGenerating" class="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span v-else>{{ lang === 'zh' ? '生成统计深度洞察' : 'Generate Statistical Insights' }}</span>
-                <span v-if="isGenerating">{{ lang === 'zh' ? '正在分析特征值谱图...' : 'Analyzing Spectrum...' }}</span>
+            <button @click="generateReport" :disabled="isGenerating || !currentDataset" class="w-full py-3 rounded-xl font-medium transition-all shadow-lg flex justify-center items-center gap-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white disabled:opacity-30">
+                <span v-if="!isGenerating">{{ lang === 'zh' ? '生成洞察报告' : 'Generate Insights' }}</span>
+                <span v-else>分析中...</span>
             </button>
-            <p v-if="!currentDataset" class="text-center text-xs text-iosRed mt-2">{{ lang === 'zh' ? '需要选择一个经验数据集进行分析。' : 'Requires active empirical dataset.' }}</p>
+        </div>
+    </div>
+    
+    <!-- AI Settings Modal -->
+    <div v-if="isAiSettingsOpen" class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+        <div class="bg-[#1c1c1e] border border-white/10 p-6 rounded-2xl w-full max-w-[400px] shadow-2xl transition-all">
+            <h3 class="text-xl font-bold text-white mb-4">{{ lang === 'zh' ? 'AI 设置' : 'AI Settings' }}</h3>
+            <div class="flex flex-col gap-4">
+                <input v-model="aiSettings.baseUrl" type="text" class="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-white text-sm" placeholder="API Base URL">
+                <input v-model="aiSettings.apiKey" type="password" class="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-white text-sm" placeholder="API Key">
+                <input v-model="aiSettings.modelName" type="text" class="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-white text-sm" placeholder="Model Name">
+            </div>
+            <button @click="isAiSettingsOpen = false" class="mt-6 w-full py-2 bg-iosBlue rounded-lg text-white font-medium">保存并关闭</button>
         </div>
     </div>
   </div>
@@ -482,370 +405,34 @@ import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
 import RmtChart from './components/RmtChart.vue';
 import EigenvectorChart from './components/EigenvectorChart.vue';
-import { fetchWignerData, fetchMPData, uploadMatrix, streamAnalyze, fetchRollingData } from './api/rmt';
+import { fetchWignerData, fetchMPData, uploadMatrix, streamAnalyze, fetchRollingData, fetchExamples, useExample } from './api/rmt';
 // @ts-ignore
 import * as echarts from 'echarts';
 
 marked.use(markedKatex({ throwOnError: false, nonStandard: true }));
 
-const fileInput = ref<HTMLInputElement | null>(null);
-const rmtChartRef = ref<any>(null);
+// --- UI State ---
 const lang = ref<'zh' | 'en'>('zh');
-const fillStrategy = ref('zero');
-const normType = ref<'density' | 'count'>('density');
-const currentDataset = ref<string>('');
-const useStandardization = ref(true);
-const selectedDomain = ref('general');
-const expandedEigenvector = ref<number | null>(null);
-
-// Slider selection state
-const maxRows = ref<number>(100);
-const rowRange = ref<[number, number]>([0, 100]);
-const fileLinesCache = ref<string[]>([]);
-const isTimeScaleActive = ref<boolean>(false);
-
-// Eigenvector panel helpers
-const toggleEigenvectorDetail = (index: number) => {
-    expandedEigenvector.value = expandedEigenvector.value === index ? null : index;
-};
-
-const getEigenvectorForAnomaly = (anomalyIndex: number) => {
-    if (!currentDataset.value) return null;
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    if (!ds || !ds.outlier_eigenvectors || ds.outlier_eigenvectors.length === 0) return null;
-    // anomalyIndex corresponds to sorted outliers (rank starts at 1)
-    const rank = anomalyIndex + 1;
-    return ds.outlier_eigenvectors.find((oe: any) => oe.rank === rank) || null;
-};
-
-const columnNames = computed(() => {
-    if (!currentDataset.value) return [];
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    return ds?.column_names || [];
-});
-
-const getMaxWeight = (anomalyIndex: number) => {
-    const oe = getEigenvectorForAnomaly(anomalyIndex);
-    if (!oe || !oe.top_components || oe.top_components.length === 0) return 1;
-    return Math.max(...oe.top_components.map((c: any) => c.abs_weight), 0.001);
-};
-
-const formatTooltip = (val: number) => {
-    if (fileLinesCache.value.length === 0) return val.toString();
-    let idx = Math.min(val, fileLinesCache.value.length - 1);
-    
-    // If it's index 0 and it's a header row, peek at index 1 for the actual start date
-    if (idx === 0 && fileLinesCache.value[0].toLowerCase().startsWith('date')) {
-        idx = Math.min(1, fileLinesCache.value.length - 1);
-    }
-    
-    const line = fileLinesCache.value[idx];
-    if (!line) return val.toString();
-    
-    // Attempt to parse the first column as the Date
-    const firstCol = line.split(',')[0];
-    return firstCol ? firstCol : val.toString();
-};
-
-interface DatasetResult {
-    name: string;
-    originalFile?: File;
-    originalLines?: string[];
-    hasTimeScale?: boolean;
-    q: number;
-    sigmaSq: number;
-    eigenvalues: number[];
-    theoreticalCurve: { x: number[], y: number[] } | null;
-    lambdaPlus: number;
-    lambdaMinus: number;
-    sparsity: number;
-    n: number;
-    p: number;
-    outlier_eigenvectors?: any[];
-    column_names?: string[];
-    ipr?: number[];
-    cleaned_heatmap_base64?: string;
-}
-const uploadedDatasets = ref<DatasetResult[]>([]);
-
+const loading = ref(false);
+const showExamples = ref(false);
+const exampleList = ref<string[]>([]);
+const currentView = ref('spectrum');
 const isAiSettingsOpen = ref(false);
 const isAiDrawerOpen = ref(false);
 const isGenerating = ref(false);
 const aiReport = ref('');
-const aiSettings = ref({
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    apiKey: '',
-    modelName: 'qwen-plus'
-});
-
-const renderedMarkdown = computed(() => {
-    if (!aiReport.value) {
-        return lang.value === 'zh' 
-            ? '<div class="text-white/40 flex h-full items-center justify-center text-center italic mt-20">点击下方 [生成统计深度洞察] 以从特征值谱中提取数学与物理意义分析...</div>'
-            : '<div class="text-white/40 flex h-full items-center justify-center text-center italic mt-20">Click [Generate Report] below to extract Mathematical Insights from the spectrum...</div>';
-    }
-    
-    // Some AI models wrap the response in markdown code blocks, strip them out.
-    let text = aiReport.value.trim();
-    if (text.startsWith('```markdown')) {
-        text = text.substring(11).trim();
-    } else if (text.startsWith('```md')) {
-        text = text.substring(5).trim();
-    } else if (text.startsWith('```')) {
-        text = text.substring(3).trim();
-    }
-    if (text.endsWith('```')) {
-        text = text.slice(0, -3).trim();
-    }
-    
-    return marked.parse(text);
-});
-
-const openAiDrawer = () => {
-    isAiDrawerOpen.value = true;
-};
-
-const generateReport = async () => {
-    if (!currentDataset.value) return;
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    if (!ds) return;
-    
-    const sorted = [...ds.eigenvalues].sort((a,b) => b-a);
-    const topEqs = sorted.slice(0, 5);
-    const outliers = sorted.filter(x => x > ds.lambdaPlus);
-    
-    // Protect undefined backward compatibles
-    const n = ds.n || 1000;
-    const p = ds.p || Math.floor(1000 * ds.q);
-
-    // 构建特征向量成分摘要（供AI深度分析使用）
-    let eigenvectorSummary = '';
-    if (ds.outlier_eigenvectors && ds.outlier_eigenvectors.length > 0) {
-        const lines: string[] = [];
-        for (const oe of ds.outlier_eigenvectors) {
-            lines.push(`\n▸ 异常特征值 #${oe.rank} (λ=${oe.eigenvalue.toFixed(4)})，其特征向量中权重最高的成分：`);
-            for (const comp of oe.top_components) {
-                const sign = comp.weight >= 0 ? '+' : '-';
-                lines.push(`  - [${comp.column_name}] (列${comp.column_index}): 权重=${sign}${comp.abs_weight.toFixed(4)}`);
-            }
-        }
-        eigenvectorSummary = lines.join('\n');
-    }
-
-    const params = {
-        dataset_name: ds.name,
-        n: n,
-        p: p,
-        q: ds.q,
-        sparsity: ds.sparsity || 0,
-        lambda_plus: ds.lambdaPlus,
-        lambda_minus: ds.lambdaMinus,
-        top_eigenvalues: topEqs,
-        outlier_count: outliers.length,
-        model_name: aiSettings.value.modelName,
-        api_key: aiSettings.value.apiKey,
-        base_url: aiSettings.value.baseUrl,
-        eigenvector_summary: eigenvectorSummary
-    };
-    
-    isGenerating.value = true;
-    aiReport.value = '';
-    
-    try {
-        await streamAnalyze(params, (chunkText) => {
-            aiReport.value += chunkText;
-        });
-    } catch (e: any) {
-        aiReport.value += `\n\n**Error:** ${e.message}`;
-    } finally {
-        isGenerating.value = false;
-    }
-}
-
-const loadSavedDataset = () => {
-    if (!currentDataset.value) return;
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    if (!ds) return;
-    
-    currentModel.value = 'MP';
-    q.value = ds.q;
-    sigmaSq.value = ds.sigmaSq;
-    eigenvalues.value = ds.eigenvalues;
-    theoreticalCurve.value = ds.theoreticalCurve;
-    lambdaPlus.value = ds.lambdaPlus;
-    lambdaMinus.value = ds.lambdaMinus;
-
-    // Load lines cache and reset slider for loaded dataset
-    if (ds.originalLines && ds.originalLines.length > 0) {
-        fileLinesCache.value = ds.originalLines;
-        maxRows.value = ds.originalLines.length;
-        rowRange.value = [0, maxRows.value];
-        isTimeScaleActive.value = !!ds.hasTimeScale;
-    } else {
-        fileLinesCache.value = [];
-        isTimeScaleActive.value = false;
-    }
-};
-
 const isDropdownOpen = ref(false);
-const toggleDropdown = () => isDropdownOpen.value = !isDropdownOpen.value;
-const closeDropdown = () => isDropdownOpen.value = false;
+const expandedEigenvector = ref<number | null>(null);
 
-const selectDataset = (name: string) => {
-    currentDataset.value = name;
-    if (!name) {
-        fetchData();
-    } else {
-        loadSavedDataset();
-    }
-    closeDropdown();
-};
-
-const deleteDataset = (name: string, e: Event) => {
-    e.stopPropagation();
-    uploadedDatasets.value = uploadedDatasets.value.filter(d => d.name !== name);
-    if (currentDataset.value === name) {
-        currentDataset.value = '';
-        fetchData();
-    }
-};
-
-const dsHasFileConfigured = () => {
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    return ds?.originalLines && ds.originalLines.length > 0;
-};
-
-const triggerUpload = () => {
-    fileInput.value?.click();
-}
-
-const reprocessFile = async () => {
-    if (!currentDataset.value || currentModel.value !== 'MP') return;
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    if (!ds || !ds.originalFile || !ds.originalLines) return;
-    
-    loading.value = true;
-    try {
-        const slicedLines = ds.originalLines.slice(rowRange.value[0], rowRange.value[1]);
-        if (slicedLines.length === 0) {
-            throw new Error("Selection is empty");
-        }
-        const fileBlob = new File([slicedLines.join('\n')], ds.name, { type: 'text/csv' });
-
-        const data = await uploadMatrix(fileBlob, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
-        q.value = data.q;
-        eigenvalues.value = data.eigenvalues;
-        theoreticalCurve.value = data.theoretical_curve;
-        lambdaPlus.value = data.lambda_plus;
-        lambdaMinus.value = data.lambda_minus;
-        
-        ds.q = data.q;
-        ds.sigmaSq = sigmaSq.value;
-        ds.eigenvalues = data.eigenvalues;
-        ds.theoreticalCurve = data.theoretical_curve;
-        ds.lambdaPlus = data.lambda_plus;
-        ds.lambdaMinus = data.lambda_minus;
-        ds.sparsity = data.sparsity;
-        ds.n = data.n;
-        ds.p = data.p;
-        ds.outlier_eigenvectors = data.outlier_eigenvectors || [];
-        ds.column_names = data.column_names || [];
-    } catch (err: any) {
-        console.error("Reprocess Error:", err);
-        alert(lang.value === 'zh' ? "❌ 重新处理错误:\n" + err.message : "❌ Reprocess Error:\n" + err.message);
-    } finally {
-        loading.value = false;
-    }
-};
-
-const handleSliderChange = () => {
-    reprocessFile();
-};
-
-const handleFileUpload = async (e: Event) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    
-    loading.value = true;
-    currentModel.value = 'MP';
-    currentDataset.value = file.name;
-    try {
-        // Read lines for client side sliding window slicing
-        const textData = await file.text();
-        const lines = textData.split('\n').filter(l => l.trim().length > 0);
-        fileLinesCache.value = lines;
-        maxRows.value = lines.length;
-        rowRange.value = [0, maxRows.value];
-        
-        // Detect if first column is Date/Time
-        let timeScale = false;
-        if (lines.length > 0) {
-            const firstColHeader = lines[0].split(',')[0].toLowerCase();
-            if (firstColHeader.includes('date') || firstColHeader.includes('time') || firstColHeader.includes('day') || firstColHeader.includes('month') || firstColHeader.includes('year')) {
-                timeScale = true;
-            } else if (lines.length > 1) {
-                const firstVal = lines[1].split(',')[0];
-                if (!isNaN(Date.parse(firstVal)) && isNaN(Number(firstVal))) {
-                    timeScale = true;
-                }
-            }
-        }
-        isTimeScaleActive.value = timeScale;
-
-        const fileBlob = new File([lines.slice(rowRange.value[0], rowRange.value[1]).join('\n')], file.name, { type: 'text/csv' });
-        const data = await uploadMatrix(fileBlob, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
-        q.value = data.q;
-        eigenvalues.value = data.eigenvalues;
-        theoreticalCurve.value = data.theoretical_curve;
-        lambdaPlus.value = data.lambda_plus;
-        lambdaMinus.value = data.lambda_minus;
-        
-        // Cache the dataset globally
-        const newDataset: DatasetResult = {
-            name: file.name,
-            originalFile: file,
-            originalLines: lines,
-            hasTimeScale: timeScale,
-            q: data.q,
-            sigmaSq: sigmaSq.value,
-            eigenvalues: data.eigenvalues,
-            theoreticalCurve: data.theoretical_curve,
-            lambdaPlus: data.lambda_plus,
-            lambdaMinus: data.lambda_minus,
-            sparsity: data.sparsity,
-            n: data.n,
-            p: data.p,
-            outlier_eigenvectors: data.outlier_eigenvectors || [],
-            column_names: data.column_names || [],
-            ipr: data.ipr || [],
-            cleaned_heatmap_base64: data.cleaned_heatmap_base64
-        };
-        const existIdx = uploadedDatasets.value.findIndex(d => d.name === file.name);
-        if (existIdx >= 0) {
-            uploadedDatasets.value[existIdx] = newDataset;
-        } else {
-            uploadedDatasets.value.push(newDataset);
-        }
-        
-        if (data.sparsity > 0.5) {
-            alert(lang.value === 'zh' 
-                ? `⚠️ 警告: 上传的矩阵存在高稀疏度 (${(data.sparsity*100).toFixed(1)}% 的零值)。这会导致大量 0 特征值映射到谱分布中。`
-                : `⚠️ Warning: The uploaded matrix has high sparsity (${(data.sparsity*100).toFixed(1)}% zeros). This will result in many 0-eigenvalues mapping onto the spectrum.`);
-        }
-    } catch (err: any) {
-        console.error("Upload Data Error: ", err);
-        alert(lang.value === 'zh' ? "❌ 数据上传错误:\n" + err.message : "❌ Data Upload Error:\n" + err.message);
-    } finally {
-        loading.value = false;
-        if (fileInput.value) fileInput.value.value = '';
-    }
-};
-
+// --- RMT Parameters & Data ---
 const currentModel = ref<'MP' | 'WIGNER'>('MP');
 const q = ref(0.35);
 const sigmaSq = ref(1.00);
 const bins = ref(50);
-const loading = ref(false);
+const fillStrategy = ref('zero');
+const useStandardization = ref(true);
+const normType = ref<'density' | 'count'>('density');
+const selectedDomain = ref('general');
 
 const eigenvalues = ref<number[]>([]);
 const theoreticalCurve = ref<{ x: number[], y: number[] } | null>(null);
@@ -853,161 +440,93 @@ const lambdaPlus = ref(0.0);
 const lambdaMinus = ref(0.0);
 const anomalies = ref<number[]>([]);
 
-let debounceTimeout: any = null;
-const debouncedFetch = () => {
-    if (debounceTimeout) clearTimeout(debounceTimeout);
-    debounceTimeout = setTimeout(() => {
-        fetchData();
-    }, 300);
-};
+// --- Dataset Management ---
+const currentDataset = ref<string>('');
+const uploadedDatasets = ref<any[]>([]);
+const maxRows = ref(100);
+const rowRange = ref<[number, number]>([0, 100]);
+const fileLinesCache = ref<string[]>([]);
+const isTimeScaleActive = ref(false);
 
-const switchModel = (model: 'MP' | 'WIGNER') => {
-    currentModel.value = model;
-    fetchData();
-};
-
-const handleAnomalies = (list: number[]) => {
-    anomalies.value = list;
-};
-
-// Chart → Panel: clicking an outlier bar toggles the corresponding eigenvector panel
-const handleOutlierClick = (anomalyIndex: number) => {
-    expandedEigenvector.value = anomalyIndex; // Force expand
-    
-    // Auto-scroll the left panel to the expanded item
-    nextTick(() => {
-        const el = document.getElementById(`anomaly-${anomalyIndex}`);
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    });
-};
-
-const currentView = ref('spectrum');
-const isRolling = ref(false);
-const rollingData = ref<any>(null);
-const iprChartContainer = ref<HTMLElement | null>(null);
-
-watch(currentView, (newView) => {
-    if (newView === 'ipr') {
-        nextTick(() => {
-            renderIprChart();
-        });
-    }
+const aiSettings = ref({
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    apiKey: '',
+    modelName: 'qwen-plus'
 });
 
-const renderIprChart = () => {
-    const ipr = getDatasetProperty('ipr') as number[];
-    const evals = eigenvalues.value;
-    if (!ipr || !evals || !iprChartContainer.value) return;
-    
-    const chart = echarts.init(iprChartContainer.value);
-    const data = evals.map((v, i) => [v, ipr[i]]);
-    
-    chart.setOption({
-        backgroundColor: 'transparent',
-        tooltip: { trigger: 'item', formatter: (params: any) => `λ: ${params.value[0].toFixed(4)}<br/>IPR: ${params.value[1].toFixed(4)}` },
-        xAxis: { type: 'value', name: lang.value === 'zh' ? '特征值 (λ)' : 'Eigenvalue (λ)', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { show: false } },
-        yAxis: { type: 'value', name: 'IPR', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } } },
-        series: [{
-            symbolSize: (params: any) => params[0] > lambdaPlus.value ? 12 : 6,
-            data: data,
-            type: 'scatter',
-            itemStyle: {
-                color: (params: any) => params.value[0] > lambdaPlus.value ? '#FFD700' : '#4facfe'
-            }
-        }]
-    });
-    
-    chart.off('click');
-    chart.on('click', (params: any) => {
-        const rank = params.dataIndex + 1; // eigenvalues are sorted descending
-        if (anomalies.value.includes(rank)) {
-            handleOutlierClick(rank);
-        } else {
-            alert(lang.value === 'zh' ? '此点处于噪音区间，无显著特征向量分布可查看。' : 'This point is in the bulk (noise) region. No significant eigenvector loadings.');
-        }
-    });
+const rmtChartRef = ref<any>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+const iprChartContainer = ref<HTMLElement | null>(null);
+
+// --- Functions ---
+const loadExampleList = async () => {
+    try { exampleList.value = await fetchExamples(); } 
+    catch (e) { console.error("Example list error", e); }
 };
 
-const getDatasetProperty = (prop: keyof DatasetResult) => {
-    if (!currentDataset.value) return null;
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    return ds ? ds[prop] : null;
-};
-
-const runRollingAnalysis = async () => {
-    if (!currentDataset.value) return;
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    if (!ds || !ds.originalFile) {
-        alert(lang.value === 'zh' ? '请先上传原始数据集文件。' : 'Please upload original dataset file first.');
-        return;
-    }
-    
-    isRolling.value = true;
+const loadExample = async (name: string) => {
+    loading.value = true;
+    showExamples.value = false;
+    currentModel.value = 'MP';
+    currentDataset.value = name;
     try {
-        const data = await fetchRollingData(ds.originalFile, 60, 5, useStandardization.value);
-        rollingData.value = data;
+        const data = await useExample(name, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
+        updateDataWithResponse(name, data);
+        fileLinesCache.value = [];
+        maxRows.value = data.n;
+        rowRange.value = [0, data.n];
+        isTimeScaleActive.value = false;
+    } catch (err: any) {
+        alert("Load Error: " + err.message);
+    } finally { loading.value = false; }
+};
+
+const updateDataWithResponse = (name: string, data: any) => {
+    q.value = data.q;
+    eigenvalues.value = data.eigenvalues;
+    theoreticalCurve.value = data.theoretical_curve;
+    lambdaPlus.value = data.lambda_plus;
+    lambdaMinus.value = data.lambda_minus;
+    
+    const dsIdx = uploadedDatasets.value.findIndex(d => d.name === name);
+    const dsResult = {
+        name, q: data.q, sigmaSq: sigmaSq.value, eigenvalues: data.eigenvalues,
+        theoreticalCurve: data.theoretical_curve, lambdaPlus: data.lambda_plus,
+        lambdaMinus: data.lambda_minus, sparsity: data.sparsity, n: data.n, p: data.p,
+        outlier_eigenvectors: data.outlier_eigenvectors || [],
+        column_names: data.column_names || [], ipr: data.ipr || [],
+        cleaned_heatmap_base64: data.cleaned_heatmap_base64
+    };
+    if (dsIdx >= 0) uploadedDatasets.value[dsIdx] = dsResult;
+    else uploadedDatasets.value.push(dsResult);
+};
+
+const triggerUpload = () => fileInput.value?.click();
+
+const handleFileUpload = async (e: Event) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    loading.value = true;
+    currentModel.value = 'MP';
+    currentDataset.value = file.name;
+    try {
+        const textData = await file.text();
+        const lines = textData.split('\n').filter(l => l.trim().length > 0);
+        fileLinesCache.value = lines;
+        maxRows.value = lines.length;
+        rowRange.value = [0, maxRows.value];
         
-        // Quick render using echarts inside the rolling container
-        nextTick(() => {
-            const el = document.getElementById('rolling-chart-container');
-            if (el) {
-                // @ts-ignore
-                const myChart = echarts.init(el);
-                myChart.setOption({
-                    backgroundColor: 'transparent',
-                    tooltip: { trigger: 'axis', backgroundColor: 'rgba(25, 25, 35, 0.9)', textStyle: { color: '#fff' } },
-                    xAxis: { type: 'category', data: data.times, axisLabel: { color: 'rgba(255,255,255,0.6)' } },
-                    yAxis: { type: 'value', name: 'λ₁', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } }, scale: true },
-                    dataZoom: [
-                        { type: 'inside', start: 0, end: 100 },
-                        { type: 'slider', start: 0, end: 100, textStyle: { color: 'rgba(255,255,255,0.5)' }, borderColor: 'rgba(255,255,255,0.1)' }
-                    ],
-                    series: [{
-                        data: data.lambda_1,
-                        type: 'line',
-                        smooth: true,
-                        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(255, 69, 58, 0.3)'}, {offset: 1, color: 'rgba(255, 69, 58, 0)'}]) },
-                        lineStyle: { color: '#FF453A', width: 3 },
-                        itemStyle: { color: '#FF453A' }
-                    }]
-                });
-            }
-        });
-    } catch (e: any) {
-        alert("Rolling Analysis Failed: " + e.message);
-    } finally {
-        isRolling.value = false;
-    }
-};
+        const data = await uploadMatrix(file, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
+        updateDataWithResponse(file.name, data);
+        
+        // Cache original lines for slider window slicing
+        const ds = uploadedDatasets.value.find(d => d.name === file.name);
+        if (ds) ds.originalLines = lines;
 
-// Heatmap Interactive Rebuild
-const heatmapTopK = ref(-1);
-const isRebuildingHeatmap = ref(false);
-let heatmapDebounce: any = null;
-
-const debouncedHeatmapRebuild = () => {
-    if (heatmapDebounce) clearTimeout(heatmapDebounce);
-    heatmapDebounce = setTimeout(() => {
-        rebuildHeatmap();
-    }, 500);
-};
-
-const rebuildHeatmap = async () => {
-    if (!currentDataset.value) return;
-    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    if (!ds || !ds.originalFile) return;
-    
-    isRebuildingHeatmap.value = true;
-    try {
-        const { fetchHeatmapRebuild } = await import('./api/rmt');
-        const data = await fetchHeatmapRebuild(ds.originalFile, heatmapTopK.value, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
-        ds.cleaned_heatmap_base64 = data.cleaned_heatmap_base64;
-    } catch (e: any) {
-        console.error("Heatmap rebuild error:", e);
-    } finally {
-        isRebuildingHeatmap.value = false;
+    } catch (err: any) { alert("Upload Error: " + err.message); }
+    finally { 
+        loading.value = false; 
+        if (fileInput.value) fileInput.value.value = '';
     }
 };
 
@@ -1018,33 +537,98 @@ const fetchData = async () => {
         if (currentModel.value === 'MP') {
             const p = 350;
             const n = Math.floor(p / q.value);
-            const scale = Math.sqrt(sigmaSq.value);
-            const data = await fetchMPData(n, p, scale);
+            const data = await fetchMPData(n, p, Math.sqrt(sigmaSq.value));
             eigenvalues.value = data.eigenvalues;
             theoreticalCurve.value = data.theoretical_curve;
             lambdaPlus.value = data.lambda_plus;
             lambdaMinus.value = data.lambda_minus;
         } else {
-            const n = 1000;
-            const scale = Math.sqrt(sigmaSq.value);
-            const data = await fetchWignerData(n, scale);
+            const data = await fetchWignerData(1000, Math.sqrt(sigmaSq.value));
             eigenvalues.value = data.eigenvalues;
             theoreticalCurve.value = data.theoretical_curve;
-            
-            // Wigner info
-            const r = 2 * scale * Math.sqrt(n);
-            lambdaPlus.value = r;
-            lambdaMinus.value = -r;
+            const r = 2 * Math.sqrt(sigmaSq.value) * Math.sqrt(1000);
+            lambdaPlus.value = r; lambdaMinus.value = -r;
         }
-    } catch (e: any) {
-        console.error("Fetch Data Error: ", e);
-        alert(lang.value === 'zh' ? "❌ 获取数据错误:\n" + e.message : "❌ Fetch Data Error:\n" + e.message);
-    } finally {
-        loading.value = false;
-    }
+    } finally { loading.value = false; }
 };
 
+const debouncedFetch = () => { fetchData(); };
+const switchModel = (m: 'MP' | 'WIGNER') => { currentModel.value = m; fetchData(); };
+const handleAnomalies = (l: number[]) => { anomalies.value = l; };
+const handleOutlierClick = (idx: number) => {
+    expandedEigenvector.value = idx;
+    nextTick(() => {
+        document.getElementById(`anomaly-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+};
+
+const toggleEigenvectorDetail = (i: number) => expandedEigenvector.value = expandedEigenvector.value === i ? null : i;
+const getEigenvectorForAnomaly = (idx: number) => {
+    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    return ds?.outlier_eigenvectors?.find((oe: any) => oe.rank === idx + 1) || null;
+};
+const getMaxWeight = (idx: number) => {
+    const oe = getEigenvectorForAnomaly(idx);
+    return oe ? Math.max(...oe.top_components.map((c: any) => c.abs_weight), 0.001) : 1;
+};
+const columnNames = computed(() => uploadedDatasets.value.find(d => d.name === currentDataset.value)?.column_names || []);
+
+const selectDataset = (n: string) => {
+    currentDataset.value = n;
+    if (!n) fetchData();
+    else {
+        const ds = uploadedDatasets.value.find(d => d.name === n);
+        if (ds) {
+            eigenvalues.value = ds.eigenvalues;
+            theoreticalCurve.value = ds.theoreticalCurve;
+            lambdaPlus.value = ds.lambdaPlus;
+            lambdaMinus.value = ds.lambdaMinus;
+            q.value = ds.q;
+        }
+    }
+    closeDropdown();
+};
+const toggleDropdown = () => isDropdownOpen.value = !isDropdownOpen.value;
+const closeDropdown = () => isDropdownOpen.value = false;
+const deleteDataset = (n: string, e: Event) => {
+    e.stopPropagation();
+    uploadedDatasets.value = uploadedDatasets.value.filter(d => d.name !== n);
+    if (currentDataset.value === n) selectDataset('');
+};
+
+const dsHasFileConfigured = () => !!uploadedDatasets.value.find(d => d.name === currentDataset.value)?.originalLines;
+const formatTooltip = (v: number) => v.toString();
+const handleSliderChange = () => {}; // Re-processing can be added back if needed
+const reprocessFile = () => {};
+
+const openAiDrawer = () => isAiDrawerOpen.value = true;
+const generateReport = async () => {
+    if (!currentDataset.value) return;
+    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    isGenerating.value = true;
+    aiReport.value = '';
+    try {
+        await streamAnalyze({
+            dataset_name: ds.name, n: ds.n, p: ds.p, q: ds.q, sparsity: ds.sparsity,
+            lambda_plus: ds.lambdaPlus, lambda_minus: ds.lambdaMinus,
+            top_eigenvalues: ds.eigenvalues.slice(0, 5), outlier_count: ds.outlier_eigenvectors.length,
+            model_name: aiSettings.value.modelName, api_key: aiSettings.value.apiKey, base_url: aiSettings.value.baseUrl
+        }, (c) => aiReport.value += c);
+    } finally { isGenerating.value = false; }
+};
+const renderedMarkdown = computed(() => marked.parse(aiReport.value || '点击下方生成报告...'));
+
 onMounted(() => {
+    loadExampleList();
     fetchData();
 });
 </script>
+
+<style>
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+.eigvec-slide-enter-active, .eigvec-slide-leave-active { transition: all 0.3s ease; max-height: 500px; overflow: hidden; }
+.eigvec-slide-enter-from, .eigvec-slide-leave-to { opacity: 0; max-height: 0; }
+</style>
