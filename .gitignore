@@ -40,7 +40,8 @@ Thumbs.db
 .env.local
 
 # Datasets
-# Datasets/  <-- Removed to allow example datasets
+# Datasets/
 *.csv
 !Datasets/*.csv
+!backend/Datasets/*.csv
 !frontend/public/*.csv
