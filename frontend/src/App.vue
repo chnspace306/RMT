@@ -444,9 +444,9 @@ const fileLinesCache = ref<string[]>([]);
 const isTimeScaleActive = ref(false);
 
 const aiSettings = ref({
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    apiKey: '',
-    modelName: 'qwen-plus'
+    baseUrl: 'https://api.deepseek.com',
+    apiKey: 'sk-4089b2d2a24b4f079a2a17e8b1aa562b',
+    modelName: 'deepseek-v4-pro'
 });
 
 const rmtChartRef = ref<any>(null);
