@@ -174,10 +174,24 @@ def health_check():
 
 @app.get("/api/rmt/examples")
 async def list_examples():
-    datasets_dir = os.path.join(os.getcwd(), "Datasets")
-    if not os.path.exists(datasets_dir):
-        datasets_dir = os.path.join(os.path.dirname(os.getcwd()), "Datasets")
-    if not os.path.exists(datasets_dir): return []
+    # 尝试多个可能的路径，确保在 Docker 容器中也能找到
+    possible_paths = [
+        os.path.join(os.getcwd(), "Datasets"),
+        os.path.join(os.path.dirname(__file__), "Datasets"),
+        "/app/backend/Datasets",
+        "/app/Datasets"
+    ]
+    
+    datasets_dir = None
+    for p in possible_paths:
+        if os.path.exists(p) and os.path.isdir(p):
+            datasets_dir = p
+            break
+            
+    if not datasets_dir: 
+        print(f"DEBUG: Datasets directory not found. Checked: {possible_paths}")
+        return []
+        
     return [f for f in os.listdir(datasets_dir) if f.endswith('.csv')]
 
 @app.post("/api/rmt/use_example", response_model=MPResponse)
@@ -187,9 +201,22 @@ async def use_example(
     fill_strategy: str = Form("zero"),
     standardize: str = Form("true")
 ):
-    datasets_dir = os.path.join(os.getcwd(), "Datasets")
-    if not os.path.exists(datasets_dir):
-        datasets_dir = os.path.join(os.path.dirname(os.getcwd()), "Datasets")
+    possible_paths = [
+        os.path.join(os.getcwd(), "Datasets"),
+        os.path.join(os.path.dirname(__file__), "Datasets"),
+        "/app/backend/Datasets",
+        "/app/Datasets"
+    ]
+    
+    datasets_dir = None
+    for p in possible_paths:
+        if os.path.exists(p) and os.path.isdir(p):
+            datasets_dir = p
+            break
+            
+    if not datasets_dir:
+        raise HTTPException(status_code=404, detail="Datasets directory not found")
+        
     file_path = os.path.join(datasets_dir, name)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Dataset not found")
