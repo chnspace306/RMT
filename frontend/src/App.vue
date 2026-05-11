@@ -343,10 +343,27 @@
                 <div v-else class="text-white/40 italic">上传数据集后生成热力图。</div>
             </div>
 
-            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-20 p-8">
-                <h2 class="text-xl font-bold mb-4 text-white/80">{{ lang === 'zh' ? '系统性风险演化 (λ₁)' : 'Systemic Risk (λ₁)' }}</h2>
-                <button @click="runRollingAnalysis" class="px-6 py-2 bg-iosBlue rounded-full">开始分析</button>
-                <div id="rolling-chart-container" class="w-full h-full mt-4"></div>
+            <div v-if="currentView === 'rolling'" class="flex-grow flex flex-col items-center justify-center h-full w-full relative pt-24 p-4 sm:p-8 overflow-hidden">
+                <div class="text-center mb-6">
+                    <h2 class="text-xl sm:text-2xl font-bold mb-2 text-white/90">{{ lang === 'zh' ? '系统性风险演化 (λ₁)' : 'Systemic Risk Evolution (λ₁)' }}</h2>
+                    <p class="text-white/40 text-xs sm:text-sm max-w-md mx-auto">{{ lang === 'zh' ? '通过滑动窗口分析最大特征值的波动，识别市场或环境系统性风险的爆发点。' : 'Identify systemic risk by analyzing the largest eigenvalue across a rolling time window.' }}</p>
+                </div>
+
+                <div class="flex gap-4 mb-8">
+                    <button @click="runRollingAnalysis" :disabled="isRolling || !currentDataset" 
+                            class="px-8 py-3 bg-iosBlue hover:bg-blue-400 disabled:opacity-30 rounded-full font-bold text-white shadow-lg transition-all flex items-center gap-2">
+                        <span v-if="isRolling" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                        {{ isRolling ? (lang === 'zh' ? '计算中...' : 'Computing...') : (lang === 'zh' ? '开始滚动分析' : 'Run Rolling Analysis') }}
+                    </button>
+                </div>
+
+                <!-- Chart Container with Fixed Height -->
+                <div class="w-full flex-grow bg-black/20 rounded-2xl border border-white/10 relative overflow-hidden min-h-[300px]">
+                    <div id="rolling-chart-container" class="w-full h-full"></div>
+                    <div v-if="!rollingData && !isRolling" class="absolute inset-0 flex items-center justify-center text-white/20 italic">
+                        {{ lang === 'zh' ? '准备就绪，点击上方按钮开始计算' : 'Ready. Click button above to start.' }}
+                    </div>
+                </div>
             </div>
 
             <div class="absolute top-4 right-4 flex gap-2 z-20">
@@ -442,6 +459,8 @@ const maxRows = ref(100);
 const rowRange = ref<[number, number]>([0, 100]);
 const fileLinesCache = ref<string[]>([]);
 const isTimeScaleActive = ref(false);
+const isRolling = ref(false);
+const rollingData = ref<any>(null);
 
 const aiSettings = ref({
     baseUrl: 'https://api.deepseek.com',
@@ -649,25 +668,52 @@ const runRollingAnalysis = async () => {
         nextTick(() => {
             const el = document.getElementById('rolling-chart-container');
             if (el) {
+                // 销毁旧实例
+                const existingInstance = echarts.getInstanceByDom(el);
+                if (existingInstance) existingInstance.dispose();
+
                 const myChart = echarts.init(el);
                 myChart.setOption({
                     backgroundColor: 'transparent',
-                    tooltip: { trigger: 'axis', backgroundColor: 'rgba(25, 25, 35, 0.9)', textStyle: { color: '#fff' } },
-                    xAxis: { type: 'category', data: data.times, axisLabel: { color: 'rgba(255,255,255,0.6)' } },
-                    yAxis: { type: 'value', name: 'λ₁', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } }, scale: true },
+                    tooltip: { 
+                        trigger: 'axis', 
+                        backgroundColor: 'rgba(25, 25, 35, 0.9)', 
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        textStyle: { color: '#fff' } 
+                    },
+                    grid: { top: '15%', left: '5%', right: '5%', bottom: '15%', containLabel: true },
+                    xAxis: { 
+                        type: 'category', 
+                        data: data.times, 
+                        axisLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 10, rotate: 30 },
+                        axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }
+                    },
+                    yAxis: { 
+                        type: 'value', 
+                        name: 'λ₁ (Systemic Risk)', 
+                        nameTextStyle: { color: 'rgba(255,255,255,0.4)', fontSize: 10 },
+                        axisLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 10 }, 
+                        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } }, 
+                        scale: true 
+                    },
                     dataZoom: [
                         { type: 'inside', start: 0, end: 100 },
-                        { type: 'slider', start: 0, end: 100, textStyle: { color: 'rgba(255,255,255,0.5)' }, borderColor: 'rgba(255,255,255,0.1)' }
+                        { type: 'slider', start: 0, end: 100, bottom: 0, height: 20, textStyle: { color: 'rgba(255,255,255,0.5)' }, borderColor: 'rgba(255,255,255,0.1)' }
                     ],
                     series: [{
+                        name: 'Max Eigenvalue',
                         data: data.lambda_1,
                         type: 'line',
                         smooth: true,
-                        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(255, 69, 58, 0.3)'}, {offset: 1, color: 'rgba(255, 69, 58, 0)'}]) },
-                        lineStyle: { color: '#FF453A', width: 3 },
+                        symbol: 'none',
+                        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(255, 69, 58, 0.4)'}, {offset: 1, color: 'rgba(255, 69, 58, 0)'}]) },
+                        lineStyle: { color: '#FF453A', width: 2.5 },
                         itemStyle: { color: '#FF453A' }
                     }]
                 });
+
+                // 响应式缩放
+                window.addEventListener('resize', () => myChart.resize());
             }
         });
     } catch (e: any) {
