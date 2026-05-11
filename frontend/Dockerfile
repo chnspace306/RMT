@@ -28,7 +28,7 @@ COPY --from=build-stage /app/dist /usr/share/nginx/html
 # 复制自定义 Nginx 配置以启用反向代理
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# 暴露 Nginx 默认端口
-EXPOSE 80
+# 暴露 Nginx 端口 (匹配 Zeabur 中的 8080)
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]
