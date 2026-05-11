@@ -222,12 +222,25 @@ async def use_example(
         raise HTTPException(status_code=404, detail="Dataset not found")
     
     df = pd.read_csv(file_path)
-    # 尝试处理带有时间列的数据集（如果是第一列）
-    if df.dtypes.iloc[0] == 'object' or pd.api.types.is_datetime64_any_dtype(df.dtypes.iloc[0]):
-        df = df.iloc[:, 1:]
+    
+    # --- 增强：自动清洗非数值列 ---
+    # 记录原始列名，用于后续特征向量对应
+    all_columns = df.columns.tolist()
+    
+    # 自动识别并保留数值型列
+    numeric_df = df.select_dtypes(include=[np.number])
+    
+    if numeric_df.empty:
+        # 如果没有数值列，尝试强制转换（排除第一列日期后）
+        for col in df.columns[1:]:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        numeric_df = df.select_dtypes(include=[np.number])
+
+    if numeric_df.empty:
+        raise HTTPException(status_code=400, detail="The dataset contains no valid numeric columns for RMT analysis.")
     
     is_std = standardize.lower() == "true"
-    return process_dataframe(df, scale, fill_strategy, is_std)
+    return process_dataframe(numeric_df, scale, fill_strategy, is_std)
 
 @app.post("/api/rmt/upload", response_model=MPResponse)
 async def upload_matrix(
@@ -239,12 +252,19 @@ async def upload_matrix(
     contents = await file.read()
     df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
     
-    # 自动处理第一列是日期的情况
-    if df.dtypes.iloc[0] == 'object' or pd.api.types.is_datetime64_any_dtype(df.dtypes.iloc[0]):
-        df = df.iloc[:, 1:]
+    # 自动过滤非数值列
+    numeric_df = df.select_dtypes(include=[np.number])
+    if numeric_df.empty:
+        # 尝试强制转换排除日期后的列
+        for col in df.columns[1:]:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        numeric_df = df.select_dtypes(include=[np.number])
+        
+    if numeric_df.empty:
+        raise HTTPException(status_code=400, detail="No numeric columns found in the uploaded CSV.")
         
     is_std = standardize.lower() == "true"
-    return process_dataframe(df, scale, fill_strategy, is_std)
+    return process_dataframe(numeric_df, scale, fill_strategy, is_std)
 
 @app.post("/api/rmt/wigner", response_model=WignerResponse)
 def get_wigner_data(req: WignerRequest):
