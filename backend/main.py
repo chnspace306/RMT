@@ -318,28 +318,44 @@ async def analyze_rmt(req: AnalyzeRequest):
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 # 保留 Rolling 和 Heatmap Rebuild 逻辑（略作优化以适配 process_dataframe 的改进）
-@app.post("/api/rmt/rolling", response_model=RollingResponse)
-async def analyze_rolling(file: UploadFile = File(...), window_size: int = Form(60), step_size: int = Form(1), standardize: str = Form("true")):
-    contents = await file.read()
-    df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
+def run_rolling_analysis_logic(df, window_size, step_size, standardize):
     if df.dtypes.iloc[0] == 'object' or pd.api.types.is_datetime64_any_dtype(df.dtypes.iloc[0]):
         times = df.iloc[:, 0].astype(str).tolist()
         df = df.iloc[:, 1:]
     else:
         times = [str(i) for i in range(len(df))]
+    
+    # 仅保留数值列
+    df = df.select_dtypes(include=[np.number])
     mat = df.dropna().values.astype(float)
     n, p = mat.shape
     is_std = standardize.lower() == "true"
     res_times, res_l1 = [], []
+    
     for start in range(0, n - window_size + 1, step_size):
         end = start + window_size
         win = mat[start:end, :]
-        if is_std: win = (win - np.mean(win, axis=0)) / (np.std(win, axis=0) + 1e-9)
+        if is_std:
+            win = (win - np.mean(win, axis=0)) / (np.std(win, axis=0) + 1e-9)
         C = (1.0 / window_size) * np.dot(win.T, win)
         evs = np.linalg.eigvalsh(C)
         res_l1.append(float(np.max(evs)))
         res_times.append(times[min(end-1, len(times)-1)])
     return RollingResponse(times=res_times, lambda_1=res_l1)
+
+@app.post("/api/rmt/rolling", response_model=RollingResponse)
+async def analyze_rolling(file: UploadFile = File(...), window_size: int = Form(60), step_size: int = Form(1), standardize: str = Form("true")):
+    contents = await file.read()
+    df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
+    return run_rolling_analysis_logic(df, window_size, step_size, standardize)
+
+@app.post("/api/rmt/rolling_example", response_model=RollingResponse)
+async def rolling_example(name: str = Form(...), window_size: int = Form(60), step_size: int = Form(1), standardize: str = Form("true")):
+    datasets_dir = get_datasets_dir()
+    if not datasets_dir: raise HTTPException(status_code=404)
+    file_path = os.path.join(datasets_dir, name)
+    df = pd.read_csv(file_path)
+    return run_rolling_analysis_logic(df, window_size, step_size, standardize)
 
 @app.post("/api/rmt/heatmap_rebuild", response_model=HeatmapResponse)
 async def heatmap_rebuild(file: UploadFile = File(...), top_k: int = Form(-1), scale: float = Form(1.0), fill_strategy: str = Form("zero"), standardize: str = Form("true")):

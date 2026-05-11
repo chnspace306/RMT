@@ -119,3 +119,17 @@ export async function useExample(name: string, scale: number, fillStrategy: stri
   if (!response.ok) throw new Error('Failed to load example dataset');
   return response.json();
 }
+export async function fetchRollingExample(name: string, windowSize: number = 60, stepSize: number = 1, standardize: boolean = true) {
+  const formData = new FormData();
+  formData.append('name', name);
+  formData.append('window_size', windowSize.toString());
+  formData.append('step_size', stepSize.toString());
+  formData.append('standardize', standardize.toString());
+
+  const response = await fetch(`${API_BASE_URL}/api/rmt/rolling_example`, {
+    method: 'POST',
+    body: formData
+  });
+  if (!response.ok) throw new Error('Failed to run rolling analysis on example');
+  return response.json();
+}

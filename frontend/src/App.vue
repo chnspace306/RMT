@@ -400,7 +400,7 @@ import markedKatex from 'marked-katex-extension';
 import 'katex/dist/katex.min.css';
 import RmtChart from './components/RmtChart.vue';
 import EigenvectorChart from './components/EigenvectorChart.vue';
-import { fetchWignerData, fetchMPData, uploadMatrix, streamAnalyze, fetchRollingData, fetchExamples, useExample } from './api/rmt';
+import { fetchWignerData, fetchMPData, uploadMatrix, streamAnalyze, fetchRollingData, fetchExamples, useExample, fetchRollingExample } from './api/rmt';
 // @ts-ignore
 import * as echarts from 'echarts';
 
@@ -632,13 +632,49 @@ const generateReport = async () => {
 const renderedMarkdown = computed(() => marked.parse(aiReport.value || '点击下方生成报告...'));
 
 const runRollingAnalysis = async () => {
+    if (!currentDataset.value) return;
     const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
-    if (!ds || !ds.originalFile) return;
+    
+    isRolling.value = true;
     try {
-        const data = await fetchRollingData(ds.originalFile, 60, 1, true);
-        // 这里可以继续完善滚动分析的图表逻辑
-        console.log(data);
-    } catch(e) {}
+        let data;
+        if (ds?.originalFile) {
+            data = await fetchRollingData(ds.originalFile, 60, 5, useStandardization.value);
+        } else {
+            data = await fetchRollingExample(currentDataset.value, 60, 5, useStandardization.value);
+        }
+        
+        rollingData.value = data;
+        
+        nextTick(() => {
+            const el = document.getElementById('rolling-chart-container');
+            if (el) {
+                const myChart = echarts.init(el);
+                myChart.setOption({
+                    backgroundColor: 'transparent',
+                    tooltip: { trigger: 'axis', backgroundColor: 'rgba(25, 25, 35, 0.9)', textStyle: { color: '#fff' } },
+                    xAxis: { type: 'category', data: data.times, axisLabel: { color: 'rgba(255,255,255,0.6)' } },
+                    yAxis: { type: 'value', name: 'λ₁', axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } }, scale: true },
+                    dataZoom: [
+                        { type: 'inside', start: 0, end: 100 },
+                        { type: 'slider', start: 0, end: 100, textStyle: { color: 'rgba(255,255,255,0.5)' }, borderColor: 'rgba(255,255,255,0.1)' }
+                    ],
+                    series: [{
+                        data: data.lambda_1,
+                        type: 'line',
+                        smooth: true,
+                        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: 'rgba(255, 69, 58, 0.3)'}, {offset: 1, color: 'rgba(255, 69, 58, 0)'}]) },
+                        lineStyle: { color: '#FF453A', width: 3 },
+                        itemStyle: { color: '#FF453A' }
+                    }]
+                });
+            }
+        });
+    } catch (e: any) {
+        alert("Rolling Analysis Failed: " + e.message);
+    } finally {
+        isRolling.value = false;
+    }
 };
 
 watch(currentView, (newView) => {
