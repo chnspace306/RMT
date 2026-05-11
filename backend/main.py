@@ -172,28 +172,29 @@ def process_dataframe(df: pd.DataFrame, scale: float, fill_strategy: str, standa
 def health_check():
     return {"status": "ok", "message": "RMT Backend is running"}
 
-@app.get("/api/rmt/examples")
-async def list_examples():
-    # 终极探测逻辑
+def get_datasets_dir():
     search_dirs = [
-        "Datasets",
-        "backend/Datasets",
-        "../Datasets",
         os.path.join(os.path.dirname(__file__), "Datasets"),
+        "backend/Datasets",
+        "Datasets",
         "/app/backend/Datasets",
         "/app/Datasets"
     ]
-    
     for d in search_dirs:
-        abs_d = os.path.abspath(d)
-        if os.path.exists(abs_d) and os.path.isdir(abs_d):
-            files = [f for f in os.listdir(abs_d) if f.endswith('.csv')]
-            if files:
-                print(f"SUCCESS: Found Datasets at {abs_d}")
-                return files
-                
-    print(f"ERROR: Could not find any Datasets in {search_dirs}")
-    return []
+        abs_p = os.path.abspath(d)
+        if os.path.exists(abs_p) and os.path.isdir(abs_p):
+            # 至少包含一个 csv 才算有效
+            if any(f.endswith('.csv') for f in os.listdir(abs_p)):
+                return abs_p
+    return None
+
+@app.get("/api/rmt/examples")
+async def list_examples():
+    d = get_datasets_dir()
+    if not d:
+        print("DEBUG: No Datasets directory found!")
+        return []
+    return [f for f in os.listdir(d) if f.endswith('.csv')]
 
 @app.post("/api/rmt/use_example", response_model=MPResponse)
 async def use_example(
@@ -202,17 +203,28 @@ async def use_example(
     fill_strategy: str = Form("zero"),
     standardize: str = Form("true")
 ):
-    search_dirs = ["Datasets", "backend/Datasets", "../Datasets", os.path.join(os.path.dirname(__file__), "Datasets"), "/app/backend/Datasets", "/app/Datasets"]
-    datasets_dir = next((os.path.abspath(d) for d in search_dirs if os.path.exists(os.path.abspath(d))), None)
-    
+    datasets_dir = get_datasets_dir()
     if not datasets_dir:
         raise HTTPException(status_code=404, detail="Datasets directory not found")
         
     file_path = os.path.join(datasets_dir, name)
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Dataset not found")
+        # 尝试二次搜索（万一文件被移动到别的探测路径了）
+        search_dirs = ["Datasets", "backend/Datasets", "/app/backend/Datasets"]
+        found = False
+        for d in search_dirs:
+            p = os.path.join(os.path.abspath(d), name)
+            if os.path.exists(p):
+                file_path = p
+                found = True
+                break
+        if not found:
+            raise HTTPException(status_code=404, detail=f"Dataset {name} not found in {datasets_dir}")
     
-    df = pd.read_csv(file_path)
+    try:
+        df = pd.read_csv(file_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"CSV read error: {str(e)}")
     
     # --- 增强：自动清洗非数值列 ---
     # 记录原始列名，用于后续特征向量对应
