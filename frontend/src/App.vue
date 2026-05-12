@@ -631,7 +631,36 @@ const deleteDataset = (n: string, e: Event) => {
 const dsHasFileConfigured = () => !!uploadedDatasets.value.find(d => d.name === currentDataset.value)?.originalLines;
 const formatTooltip = (v: number) => v.toString();
 const handleSliderChange = () => {}; 
-const reprocessFile = () => {};
+const reprocessFile = async () => {
+    if (!currentDataset.value) return;
+    const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
+    if (!ds) return;
+
+    loading.value = true;
+    try {
+        let data;
+        const scale = Math.sqrt(sigmaSq.value);
+        if (ds.originalFile) {
+            data = await uploadMatrix(ds.originalFile, scale, fillStrategy.value, useStandardization.value);
+        } else {
+            data = await useExample(ds.name, scale, fillStrategy.value, useStandardization.value);
+        }
+        updateDataWithResponse(ds.name, data);
+        
+        // Sync local reactive state for immediate UI update
+        eigenvalues.value = data.eigenvalues;
+        theoreticalCurve.value = data.theoretical_curve;
+        lambdaPlus.value = data.lambda_plus;
+        lambdaMinus.value = data.lambda_minus;
+        q.value = data.q;
+        
+    } catch (err: any) {
+        alert("Reprocess Error: " + err.message);
+    } finally {
+        loading.value = false;
+    }
+};
+
 
 const openAiDrawer = () => isAiDrawerOpen.value = true;
 const generateReport = async () => {
