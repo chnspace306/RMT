@@ -483,6 +483,27 @@ const rmtChartRef = ref<any>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const iprChartContainer = ref<HTMLElement | null>(null);
 
+// 时间列自动识别逻辑 (用于本地 CSV 预解析)
+const timeColumnIndex = ref<number | null>(null);
+const timeLabels = ref<string[]>([]);
+
+const detectTimeColumn = (headers: string[]) => {
+    const timeKeywords = ['date', 'time', 'timestamp', 'year', 'month', 'day', '日期', '时间', '成交日期', 'datetime', 'period', 'unnamed', 'index'];
+    timeColumnIndex.value = null;
+    for (let i = 0; i < headers.length; i++) {
+        const lowerHeader = headers[i].toLowerCase();
+        if (timeKeywords.some(k => lowerHeader.includes(k))) {
+            timeColumnIndex.value = i;
+            console.log("Detected time column locally:", headers[i]);
+            return;
+        }
+    }
+    // Fallback: Default to first column if it's likely a label (more than 1 column total)
+    if (headers.length > 1) {
+        timeColumnIndex.value = 0;
+    }
+};
+
 // --- Functions ---
 const loadExampleList = async () => {
     try { exampleList.value = await fetchExamples(); } 
@@ -502,14 +523,13 @@ const loadExample = async (name: string) => {
     try {
         const data = await useExample(name, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
         updateDataWithResponse(name, data);
-        fileLinesCache.value = [];
-        maxRows.value = data.n;
-        rowRange.value = [0, data.n];
-        isTimeScaleActive.value = false;
+        isTimeScaleActive.value = true;
     } catch (err: any) {
         alert("Load Error: " + err.message);
     } finally { loading.value = false; }
 };
+
+
 
 const updateDataWithResponse = (name: string, data: any) => {
     q.value = data.q;
@@ -518,6 +538,20 @@ const updateDataWithResponse = (name: string, data: any) => {
     lambdaPlus.value = data.lambda_plus;
     lambdaMinus.value = data.lambda_minus;
     
+    // Ensure global refs are synced for the active dataset
+    if (currentDataset.value === name) {
+        timeLabels.value = data.time_labels || [];
+        const totalRows = (data.time_labels && data.time_labels.length > 0) ? data.time_labels.length : data.n;
+        
+        if (maxRows.value === 100 || maxRows.value === 0) {
+            maxRows.value = totalRows;
+            rowRange.value = [0, totalRows];
+        } else {
+            maxRows.value = totalRows;
+        }
+        isTimeScaleActive.value = true;
+    }
+    
     const dsIdx = uploadedDatasets.value.findIndex(d => d.name === name);
     const dsResult = {
         name, q: data.q, sigmaSq: sigmaSq.value, eigenvalues: data.eigenvalues,
@@ -525,6 +559,7 @@ const updateDataWithResponse = (name: string, data: any) => {
         lambdaMinus: data.lambda_minus, sparsity: data.sparsity, n: data.n, p: data.p,
         outlier_eigenvectors: data.outlier_eigenvectors || [],
         column_names: data.column_names || [], ipr: data.ipr || [],
+        timeLabels: data.time_labels || [],
         cleaned_heatmap_base64: data.cleaned_heatmap_base64
     };
     if (dsIdx >= 0) uploadedDatasets.value[dsIdx] = dsResult;
@@ -543,16 +578,30 @@ const handleFileUpload = async (e: Event) => {
         const textData = await file.text();
         const lines = textData.split('\n').filter(l => l.trim().length > 0);
         fileLinesCache.value = lines;
-        maxRows.value = lines.length;
-        rowRange.value = [0, maxRows.value];
         
+        // 提取时间标签
+        if (lines.length > 1) {
+            const header = lines[0].split(',');
+            detectTimeColumn(header);
+            if (timeColumnIndex.value !== null) {
+                timeLabels.value = lines.slice(1).map(l => l.split(',')[timeColumnIndex.value!]);
+            } else {
+                timeLabels.value = lines.slice(1).map((_, i) => `Row ${i}`);
+            }
+        }
+
         const data = await uploadMatrix(file, Math.sqrt(sigmaSq.value), fillStrategy.value, useStandardization.value);
         updateDataWithResponse(file.name, data);
         
+        maxRows.value = data.n;
+        rowRange.value = [0, data.n];
+        isTimeScaleActive.value = true;
+
         const ds = uploadedDatasets.value.find(d => d.name === file.name);
         if (ds) {
             ds.originalLines = lines;
             ds.originalFile = file;
+            ds.timeLabels = timeLabels.value;
         }
 
     } catch (err: any) { alert("Upload Error: " + err.message); }
@@ -565,6 +614,7 @@ const handleFileUpload = async (e: Event) => {
 const fetchData = async () => {
     loading.value = true;
     currentDataset.value = '';
+    isTimeScaleActive.value = false;
     try {
         if (currentModel.value === 'MP') {
             const p = 350;
@@ -607,8 +657,10 @@ const columnNames = computed(() => uploadedDatasets.value.find(d => d.name === c
 
 const selectDataset = (n: string) => {
     currentDataset.value = n;
-    if (!n) fetchData();
-    else {
+    if (!n) {
+        fetchData();
+        isTimeScaleActive.value = false;
+    } else {
         const ds = uploadedDatasets.value.find(d => d.name === n);
         if (ds) {
             eigenvalues.value = ds.eigenvalues;
@@ -616,6 +668,15 @@ const selectDataset = (n: string) => {
             lambdaPlus.value = ds.lambdaPlus;
             lambdaMinus.value = ds.lambdaMinus;
             q.value = ds.q;
+            isTimeScaleActive.value = true;
+            if (ds.timeLabels) {
+                timeLabels.value = ds.timeLabels;
+                console.log('Selected dataset timeLabels:', timeLabels.value.length);
+            } else {
+                timeLabels.value = [];
+            }
+            maxRows.value = ds.n;
+            rowRange.value = [0, ds.n];
         }
     }
     closeDropdown();
@@ -628,9 +689,14 @@ const deleteDataset = (n: string, e: Event) => {
     if (currentDataset.value === n) selectDataset('');
 };
 
-const dsHasFileConfigured = () => !!uploadedDatasets.value.find(d => d.name === currentDataset.value)?.originalLines;
-const formatTooltip = (v: number) => v.toString();
-const handleSliderChange = () => {}; 
+const dsHasFileConfigured = () => !!uploadedDatasets.value.find(d => d.name === currentDataset.value);
+const formatTooltip = (v: number) => {
+    if (timeLabels.value && timeLabels.value[v]) return timeLabels.value[v];
+    return v.toString();
+};
+const handleSliderChange = () => {
+    reprocessFile();
+}; 
 const reprocessFile = async () => {
     if (!currentDataset.value) return;
     const ds = uploadedDatasets.value.find(d => d.name === currentDataset.value);
@@ -640,14 +706,15 @@ const reprocessFile = async () => {
     try {
         let data;
         const scale = Math.sqrt(sigmaSq.value);
+        const [start, end] = rowRange.value;
         if (ds.originalFile) {
-            data = await uploadMatrix(ds.originalFile, scale, fillStrategy.value, useStandardization.value);
+            data = await uploadMatrix(ds.originalFile, scale, fillStrategy.value, useStandardization.value, start, end);
         } else {
-            data = await useExample(ds.name, scale, fillStrategy.value, useStandardization.value);
+            data = await useExample(ds.name, scale, fillStrategy.value, useStandardization.value, start, end);
         }
         updateDataWithResponse(ds.name, data);
         
-        // Sync local reactive state for immediate UI update
+        // Sync local reactive state
         eigenvalues.value = data.eigenvalues;
         theoreticalCurve.value = data.theoretical_curve;
         lambdaPlus.value = data.lambda_plus;

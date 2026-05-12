@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta.env.MODE === 'production') ? '' : (import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000');
+const API_BASE_URL = (import.meta.env.MODE === 'production') ? '' : (import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8888');
 
 export async function fetchWignerData(n: number, scale: number) {
   const response = await fetch(`${API_BASE_URL}/api/rmt/wigner`, {
@@ -20,12 +20,14 @@ export async function fetchMPData(n: number, p: number, scale: number) {
   return response.json();
 }
 
-export async function uploadMatrix(file: File, scale: number, fillStrategy: string = 'zero', standardize: boolean = true) {
+export async function uploadMatrix(file: File, scale: number, fillStrategy: string = 'zero', standardize: boolean = true, startRow: number = 0, endRow: number = -1) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('scale', scale.toString());
   formData.append('fill_strategy', fillStrategy);
   formData.append('standardize', standardize.toString());
+  formData.append('start_row', startRow.toString());
+  formData.append('end_row', endRow.toString());
 
   const response = await fetch(`${API_BASE_URL}/api/rmt/upload`, {
     method: 'POST',
@@ -105,12 +107,14 @@ export async function fetchExamples() {
   return response.json();
 }
 
-export async function useExample(name: string, scale: number, fillStrategy: string = 'zero', standardize: boolean = true) {
+export async function useExample(name: string, scale: number, fillStrategy: string = 'zero', standardize: boolean = true, startRow: number = 0, endRow: number = -1) {
   const formData = new FormData();
   formData.append('name', name);
   formData.append('scale', scale.toString());
   formData.append('fill_strategy', fillStrategy);
   formData.append('standardize', standardize.toString());
+  formData.append('start_row', startRow.toString());
+  formData.append('end_row', endRow.toString());
 
   const response = await fetch(`${API_BASE_URL}/api/rmt/use_example`, {
     method: 'POST',

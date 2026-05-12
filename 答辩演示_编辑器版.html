@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RMT Analytics 毕业答辩 — 可视化编辑器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:#cbd5e1; padding:40px 0 120px; display:grid; place-items:center; gap:40px; font-family:'Microsoft YaHei','微软雅黑',sans-serif; color:#0f172a; }
+
+/* ═══════════ 浮动工具栏 ═══════════ */
+#toolbar {
+  position:fixed; top:16px; right:16px; z-index:9999;
+  display:flex; gap:8px; background:#1e293b; padding:10px 16px; border-radius:12px;
+  box-shadow:0 8px 40px rgba(0,0,0,0.3);
+}
+#toolbar button {
+  padding:8px 16px; border:none; border-radius:8px; cursor:pointer; font-size:13px;
+  font-family:'Microsoft YaHei',sans-serif; font-weight:600; transition:all 0.2s;
+  display:flex; align-items:center; gap:6px;
+}
+#toolbar button:hover { transform:scale(1.05); }
+.btn-edit { background:#334155; color:#e2e8f0; }
+.btn-edit.active { background:#10b981; color:#fff; }
+.btn-export { background:#1e3a8a; color:#fff; }
+.btn-addimg { background:#f59e0b; color:#fff; }
+#toolbar-status { font-size:11px; color:#94a3b8; align-self:center; }
+
+/* ═══════════ 编辑模式提示 ═══════════ */
+.edit-indicator {
+  display:none; position:absolute; top:8px; right:12px; z-index:20;
+  background:#10b981; color:#fff; font-size:10px; padding:3px 10px; border-radius:10px;
+  font-weight:bold; letter-spacing:1px;
+}
+body.editing .edit-indicator { display:block; }
+
+/* ═══════════ 编辑模式样式 ═══════════ */
+body.editing [data-editable] {
+  outline:2px dashed rgba(16,185,129,0.3); outline-offset:3px;
+  cursor:text; transition:outline 0.2s;
+}
+body.editing [data-editable]:hover { outline-color:rgba(16,185,129,0.7); }
+body.editing [data-editable]:focus { outline:2px solid #10b981; background:rgba(16,185,129,0.04); }
+
+body.editing [data-editable-image] {
+  outline:2px dashed rgba(245,158,11,0.5); outline-offset:4px; cursor:pointer;
+}
+body.editing [data-editable-image]:hover { outline-color:#f59e0b; filter:brightness(0.95); }
+
+/* 图片上传遮罩 */
+.img-upload-overlay {
+  display:none; position:absolute; inset:0; background:rgba(0,0,0,0.5);
+  border-radius:8px; align-items:center; justify-content:center; z-index:15;
+  cursor:pointer; flex-direction:column; gap:6px;
+}
+body.editing .img-upload-overlay { display:flex; }
+.img-upload-overlay i { font-size:28px; color:#fff; }
+.img-upload-overlay span { font-size:12px; color:#fff; font-weight:bold; }
+
+/* ═══════════ 幻灯片 ═══════════ */
+.slide-container {
+  width:1280px; height:720px; background:#fff; overflow:hidden;
+  position:relative; display:flex; flex-direction:column;
+  box-shadow:0 40px 100px -12px rgba(0,0,0,0.2); border-radius:4px;
+}
+.slide-container>* { position:relative; z-index:1; }
+.grid-bg::before {
+  content:''; position:absolute; inset:0;
+  background-image:linear-gradient(#f1f5f9 1px,transparent 1px),linear-gradient(90deg,#f1f5f9 1px,transparent 1px);
+  background-size:40px 40px; z-index:0;
+}
+.slide-header {
+  width:100%; height:85px; padding:0 50px; display:flex; align-items:center; justify-content:center;
+  background:rgba(255,255,255,0.95); border-bottom:1px solid #f1f5f9; z-index:10;
+}
+.header-logo-group { display:flex; align-items:center; gap:20px; }
+.header-logo-group img { max-height:48px; max-width:250px; object-fit:contain; filter:grayscale(100%) opacity(0.8); }
+.header-divider { width:2px; height:30px; background:#e2e8f0; }
+.header-text { font-family:'Roboto Mono',monospace; font-size:15px; color:#94a3b8; font-weight:bold; letter-spacing:1px; }
+.slide-title-area { margin:30px 60px 10px; border-left:8px solid #10b981; padding-left:20px; }
+.slide-title { font-size:42px; font-weight:bold; color:#0f172a; letter-spacing:1px; line-height:1.2; }
+.slide-subtitle { font-size:16px; color:#94a3b8; font-family:'Roboto Mono',monospace; text-transform:uppercase; margin-top:5px; }
+.content-area { flex-grow:1; padding:15px 60px 40px; display:flex; align-items:center; justify-content:space-between; gap:50px; }
+.col-text { flex:0 0 52%; display:flex; flex-direction:column; justify-content:center; }
+.col-visual { flex:0 0 44%; height:100%; display:flex; align-items:center; justify-content:center; }
+p,li { font-size:22px; color:#475569; line-height:1.7; margin-bottom:15px; }
+strong { color:#0f172a; font-weight:bold; }
+.data-heavy { font-family:'Oswald',sans-serif; font-size:100px; font-weight:bold; color:#1e3a8a; line-height:1; margin:10px 0; }
+.svg-box { width:100%; background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:25px; box-shadow:0 10px 30px rgba(0,0,0,0.04); }
+.slide-footer { position:absolute; bottom:20px; left:60px; right:60px; display:flex; justify-content:space-between; font-size:14px; color:#94a3b8; font-family:'Roboto Mono',monospace; }
+.custom-bullet { list-style:none; padding:0; }
+.custom-bullet li { position:relative; padding-left:30px; }
+.custom-bullet li::before { content:'■'; position:absolute; left:0; top:6px; color:#10b981; font-size:14px; }
+
+/* ═══════════ 封面 ═══════════ */
+.cover-layout { background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; border-top:10px solid #1e3a8a; }
+.matrix-bg { position:absolute; inset:0; z-index:0; opacity:0.15; background-image:radial-gradient(#1e3a8a 1.5px,transparent 1.5px); background-size:50px 50px; }
+.cover-tag { display:inline-block; background:#f8fafc; border:1px solid #e2e8f0; color:#64748b; padding:8px 24px; border-radius:4px; font-size:18px; font-weight:bold; margin-bottom:40px; letter-spacing:3px; font-family:'Roboto Mono'; z-index:2; }
+.cover-title { font-size:70px; font-weight:bold; color:#0f172a; line-height:1.2; margin-bottom:20px; z-index:2; }
+.cover-en { font-family:'Roboto Mono',monospace; font-size:22px; color:#94a3b8; margin-bottom:50px; letter-spacing:1px; z-index:2; }
+.cover-line { width:80px; height:6px; background:#10b981; margin-bottom:50px; z-index:2; }
+.cover-info { font-size:24px; color:#475569; z-index:2; display:flex; gap:80px; justify-content:center; margin-top:20px; }
+.cover-info span { color:#94a3b8; margin-right:15px; font-family:'Roboto Mono'; }
+
+/* ═══════════ 目录 ═══════════ */
+.toc-list { width:75%; margin:0 auto; display:flex; flex-direction:column; gap:20px; }
+.toc-row { display:flex; align-items:center; background:#fff; padding:25px 45px; border-radius:4px; border:1px solid #edf2f7; border-left:6px solid #e2e8f0; transition:0.3s; }
+.toc-row:hover { border-left-color:#10b981; transform:scale(1.02); }
+.toc-idx { font-family:'Oswald',sans-serif; font-size:42px; font-weight:bold; color:#cbd5e1; width:100px; }
+.toc-main { font-size:28px; font-weight:bold; color:#1e293b; flex:1; }
+.toc-en { font-family:'Roboto Mono',monospace; font-size:14px; color:#94a3b8; text-transform:uppercase; }
+
+/* ═══════════ Q&A ═══════════ */
+.qa-layout { background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+.qa-huge { font-family:'Oswald',sans-serif; font-size:180px; font-weight:bold; color:#f1f5f9; line-height:1; margin-bottom:-40px; z-index:0; letter-spacing:10px; }
+.qa-title { font-size:54px; font-weight:bold; color:#1e3a8a; z-index:1; margin-bottom:10px; }
+.qa-sub { font-size:20px; color:#94a3b8; font-family:'Roboto Mono',monospace; text-transform:uppercase; margin-bottom:10px; z-index:1; }
+.qa-card { background:#fff; padding:40px 60px; border-radius:12px; box-shadow:0 30px 80px rgba(0,0,0,0.08); border:1px solid #f1f5f9; display:flex; align-items:center; gap:50px; z-index:2; }
+.qr-box { width:180px; height:180px; border:1.5px solid #f1f5f9; border-radius:8px; background:#fafafa; display:flex; align-items:center; justify-content:center; position:relative; }
+.qr-box::after { content:'SYSTEM PREVIEW'; position:absolute; bottom:-25px; font-size:10px; color:#94a3b8; font-family:'Roboto Mono'; font-weight:bold; }
+
+/* ═══════════ 截图样式 ═══════════ */
+.screenshot { width:100%; height:auto; object-fit:contain; border-radius:8px; border:1px solid #e2e8f0; box-shadow:0 4px 20px rgba(0,0,0,0.06); }
+.img-wrapper { position:relative; display:inline-block; width:100%; }
+
+/* ═══════════ Loading ═══════════ */
+#export-loading { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:99999; align-items:center; justify-content:center; flex-direction:column; }
+#export-loading .spinner { width:48px; height:48px; border:4px solid rgba(255,255,255,0.2); border-top-color:#10b981; border-radius:50%; animation:spin 0.8s linear infinite; }
+#export-loading p { color:#fff; margin-top:16px; font-size:16px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ 浮动工具栏 ═══════════ -->
+<div id="toolbar">
+  <button class="btn-edit" id="btnEdit" onclick="toggleEditMode()">
+    <i class="fa-solid fa-pen-to-square"></i> <span id="btnEditLabel">开启编辑</span>
+  </button>
+  <button class="btn-addimg" id="btnAddImg" onclick="addImageToSlide()" style="display:none;">
+    <i class="fa-solid fa-image"></i> 插入图片
+  </button>
+  <button class="btn-export" onclick="exportToPPTX()">
+    <i class="fa-solid fa-file-powerpoint"></i> 导出 PPTX
+  </button>
+  <span id="toolbar-status"></span>
+</div>
+
+<!-- ═══════════ 导出加载遮罩 ═══════════ -->
+<div id="export-loading">
+  <div class="spinner"></div>
+  <p>正在生成 PPTX，请稍候...</p>
+</div>
+
+<!-- ═══════════════════════ PAGE 01: 封面 ═══════════════════════ -->
+<div class="slide-container cover-layout" data-slide="1">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="matrix-bg"></div>
+  <div class="slide-header" style="position:absolute;top:0;background:transparent;border:none;">
+    <div class="header-logo-group">
+      <img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png" alt="Logo" data-editable-image>
+      <div class="header-divider"></div>
+      <div class="header-text">GCTB-NSU JOINT INSTITUTE</div>
+    </div>
+  </div>
+  <div class="cover-tag" data-editable>本科毕业论文答辩</div>
+  <h1 class="cover-title" data-editable>基于 RMT 的可视化<br>随机矩阵分析系统设计与实现</h1>
+  <p class="cover-en" data-editable>DESIGN &amp; IMPLEMENTATION OF RMT ANALYTICS PLATFORM</p>
+  <div class="cover-line"></div>
+  <div class="cover-info">
+    <div><span>答辩人：</span> <strong data-editable>刘俊佑</strong></div>
+    <div><span>指导教师：</span> <strong data-editable>王梦林</strong></div>
+  </div>
+  <p style="margin-top:30px;font-size:22px;color:#64748b;z-index:2;" data-editable>专业：数据科学与大数据技术 | 2026届</p>
+  <div class="slide-footer" style="justify-content:center;"><div style="color:#cbd5e1;">© 2026 JUNYOU LIU. ALL RIGHTS RESERVED.</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 02: 目录 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="2">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">AGENDA</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>汇报大纲</h2><div class="slide-subtitle" data-editable>Logic Framework Overview</div></div>
+  <div class="content-area" style="flex-direction:column;justify-content:center;">
+    <div class="toc-list">
+      <div class="toc-row" style="border-left-color:#1e3a8a;"><div class="toc-idx">01</div><div class="toc-main" data-editable>研究背景与核心理论痛点</div><div class="toc-en">Background &amp; Theory</div></div>
+      <div class="toc-row" style="border-left-color:#10b981;"><div class="toc-idx">02</div><div class="toc-main" data-editable>工程架构与神经符号协同设计</div><div class="toc-en">Architecture &amp; Innovation</div></div>
+      <div class="toc-row" style="border-left-color:#f59e0b;"><div class="toc-idx">03</div><div class="toc-main" data-editable>真实市场实证分析与策略回测</div><div class="toc-en">Empirical Studies</div></div>
+      <div class="toc-row" style="border-left-color:#64748b;"><div class="toc-idx">04</div><div class="toc-main" data-editable>系统工程完备度与总结展望</div><div class="toc-en">Conclusion &amp; Outlook</div></div>
+    </div>
+  </div>
+  <div class="slide-footer"><div>02 / 13</div><div>UNDERGRADUATE THESIS DEFENSE</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 03: 维度灾难 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="3">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">BACKGROUND</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>01 / 背景：高维数据的"维度灾难"</h2><div class="slide-subtitle" data-editable>When P Approaches N</div></div>
+  <div class="content-area">
+    <div class="col-text">
+      <p data-editable>当特征维度 <strong>P</strong> 与样本量 <strong>N</strong> 处于同量级 (P ≈ N) 时：</p>
+      <ul class="custom-bullet">
+        <li data-editable><strong>结构虚化：</strong> 纯随机序列也会在协方差矩阵中表现出明显的"伪结构"与"伪相关"。</li>
+        <li data-editable><strong>决策失真：</strong> 投资组合优化器、聚类算法等对噪声过拟合，样本外表现急剧恶化。</li>
+        <li data-editable><strong>工具匮乏：</strong> RMT 理论虽成熟，但在业界极度缺乏可视化、交互式的应用平台。</li>
+      </ul>
+    </div>
+    <div class="col-visual"><div class="svg-box">
+      <p style="font-size:13px;font-weight:700;color:#64748b;text-align:center;margin-bottom:12px;">低维精确聚焦 vs 高维谱分布畸变扩散</p>
+      <svg viewBox="0 0 500 270">
+        <rect x="10" y="5" width="230" height="255" rx="6" fill="#f8fafc" stroke="#dbeafe" stroke-width="1.5"/>
+        <text x="125" y="28" text-anchor="middle" font-size="12" fill="#1e3a8a" font-weight="700">P ≪ N（有效统计域）</text>
+        <line x1="30" y1="225" x2="215" y2="225" stroke="#cbd5e1" stroke-width="1.5"/>
+        <rect x="50" y="155" width="22" height="70" rx="3" fill="#93c5fd" opacity="0.85"/>
+        <rect x="78" y="130" width="22" height="95" rx="3" fill="#60a5fa" opacity="0.9"/>
+        <rect x="106" y="100" width="22" height="125" rx="3" fill="#3b82f6" opacity="0.95"/>
+        <rect x="134" y="115" width="22" height="110" rx="3" fill="#60a5fa" opacity="0.9"/>
+        <rect x="162" y="140" width="22" height="85" rx="3" fill="#93c5fd" opacity="0.85"/>
+        <ellipse cx="118" cy="160" rx="52" ry="48" fill="none" stroke="#1e3a8a" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.5"/>
+        <text x="118" y="258" text-anchor="middle" font-size="10" fill="#1e3a8a" font-weight="600">信噪分离清晰 · 估计稳健</text>
+        <rect x="255" y="5" width="235" height="255" rx="6" fill="#fef2f2" stroke="#fecaca" stroke-width="1.5"/>
+        <text x="372" y="28" text-anchor="middle" font-size="12" fill="#dc2626" font-weight="700">P ≈ N（谱分布畸变）</text>
+        <line x1="275" y1="225" x2="465" y2="225" stroke="#cbd5e1" stroke-width="1.5"/>
+        <rect x="275" y="120" width="7" height="105" rx="1" fill="#fca5a5" opacity="0.6"/>
+        <rect x="286" y="110" width="7" height="115" rx="1" fill="#f87171" opacity="0.65"/>
+        <rect x="297" y="95" width="7" height="130" rx="1" fill="#ef4444" opacity="0.7"/>
+        <rect x="308" y="85" width="7" height="140" rx="1" fill="#dc2626" opacity="0.7"/>
+        <rect x="319" y="78" width="7" height="147" rx="1" fill="#dc2626" opacity="0.72"/>
+        <rect x="330" y="72" width="7" height="153" rx="1" fill="#b91c1c" opacity="0.75"/>
+        <rect x="341" y="68" width="7" height="157" rx="1" fill="#b91c1c" opacity="0.75"/>
+        <rect x="352" y="62" width="7" height="163" rx="1" fill="#991b1b" opacity="0.78"/>
+        <rect x="363" y="58" width="7" height="167" rx="1" fill="#991b1b" opacity="0.8"/>
+        <rect x="374" y="52" width="7" height="173" rx="1" fill="#7f1d1d" opacity="0.82"/>
+        <rect x="385" y="48" width="7" height="177" rx="1" fill="#7f1d1d" opacity="0.82"/>
+        <rect x="396" y="42" width="7" height="183" rx="1" fill="#7f1d1d" opacity="0.85"/>
+        <rect x="407" y="35" width="7" height="190" rx="1" fill="#450a0a" opacity="0.88"/>
+        <rect x="418" y="28" width="7" height="197" rx="1" fill="#450a0a" opacity="0.9"/>
+        <rect x="429" y="18" width="7" height="207" rx="1" fill="#450a0a" opacity="0.92"/>
+        <line x1="330" y1="50" x2="330" y2="18" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arrRed)"/>
+        <line x1="418" y1="30" x2="418" y2="6" stroke="#dc2626" stroke-width="1.5" marker-end="url(#arrRed)"/>
+        <text x="330" y="14" text-anchor="middle" font-size="8" fill="#dc2626" font-weight="bold">λ₁</text>
+        <text x="420" y="5" text-anchor="middle" font-size="8" fill="#dc2626" font-weight="bold">λ₂</text>
+        <text x="372" y="258" text-anchor="middle" font-size="10" fill="#dc2626" font-weight="600">谱畸变 · 噪声淹没信号</text>
+        <defs><marker id="arrRed" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#dc2626"/></marker></defs>
+      </svg>
+    </div></div>
+  </div>
+  <div class="slide-footer"><div>03 / 13</div><div>PROBLEM IDENTIFICATION</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 04: M-P 理论 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="4">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">THEORY</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>01 / 数学标尺：Marchenko-Pastur 分布</h2><div class="slide-subtitle" data-editable>The Threshold for Signal Discovery</div></div>
+  <div class="content-area">
+    <div class="col-text">
+      <p data-editable>系统通过 M-P 律提供了一个<strong>独立于假设的理论自动阈值</strong>：</p>
+      <div style="background:rgba(248,250,252,0.8);padding:15px 25px;border-radius:6px;font-family:'Roboto Mono';display:inline-block;color:#1e3a8a;border:1.5px dashed #cbd5e1;font-size:24px;">λ<sub>±</sub> = σ² (1 ± √q)²</div>
+      <ul class="custom-bullet" style="margin-top:16px;">
+        <li data-editable><strong>噪音区域 (Bulk)：</strong> 落在 [λ₋, λ₊] 区间内的特征值均视为纯随机噪声。</li>
+        <li data-editable><strong>信号提取 (Signal)：</strong> 任何越过 λ₊ 的离群特征值代表数据中真实存在的非随机结构。</li>
+        <li data-editable>λ₊ 由维度比 q=p/n 唯一确定——<strong>无需人工调参</strong>。</li>
+      </ul>
+    </div>
+    <div class="col-visual"><div class="svg-box">
+      <p style="font-size:13px;font-weight:700;color:#64748b;text-align:center;margin-bottom:8px;">经验谱密度 (ESD) 拟合图</p>
+      <svg viewBox="0 0 480 300">
+        <line x1="50" y1="260" x2="460" y2="260" stroke="#94a3b8" stroke-width="1.5"/><line x1="50" y1="260" x2="50" y2="20" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="255" y="290" text-anchor="middle" font-size="11" fill="#64748b">特征值 λ</text>
+        <text x="18" y="145" text-anchor="middle" font-size="11" fill="#64748b" transform="rotate(-90,18,145)">概率密度 ρ(λ)</text>
+        <line x1="145" y1="260" x2="145" y2="268" stroke="#64748b" stroke-width="1"/><text x="145" y="282" text-anchor="middle" font-size="10" fill="#64748b">λ₋</text>
+        <path d="M 145 258 Q 160 248 190 220 Q 220 190 250 168 Q 280 150 305 145 Q 320 143 335 148 Q 340 155 325 170 Q 300 200 270 230 Q 240 248 145 258 Z" fill="#dbeafe" fill-opacity="0.5" stroke="none"/>
+        <path d="M 145 258 Q 160 248 190 220 Q 220 190 250 168 Q 280 150 305 145 Q 320 143 335 148" fill="none" stroke="#1e3a8a" stroke-width="2.5"/>
+        <line x1="335" y1="20" x2="335" y2="265" stroke="#dc2626" stroke-width="2.5" stroke-dasharray="8,4"/><text x="335" y="282" text-anchor="middle" font-size="11" fill="#dc2626" font-weight="700">λ₊</text>
+        <rect x="155" y="215" width="9" height="43" fill="#93c5fd" opacity="0.7" rx="1"/><rect x="170" y="195" width="9" height="63" fill="#93c5fd" opacity="0.73" rx="1"/>
+        <rect x="185" y="182" width="9" height="76" fill="#93c5fd" opacity="0.75" rx="1"/><rect x="200" y="170" width="9" height="88" fill="#93c5fd" opacity="0.78" rx="1"/>
+        <rect x="215" y="160" width="9" height="98" fill="#93c5fd" opacity="0.8" rx="1"/><rect x="230" y="155" width="9" height="103" fill="#93c5fd" opacity="0.8" rx="1"/>
+        <rect x="245" y="152" width="9" height="106" fill="#93c5fd" opacity="0.78" rx="1"/><rect x="260" y="155" width="9" height="103" fill="#93c5fd" opacity="0.75" rx="1"/>
+        <rect x="275" y="160" width="9" height="98" fill="#93c5fd" opacity="0.7" rx="1"/><rect x="290" y="172" width="9" height="86" fill="#93c5fd" opacity="0.65" rx="1"/>
+        <rect x="305" y="190" width="9" height="68" fill="#93c5fd" opacity="0.6" rx="1"/><rect x="320" y="215" width="9" height="43" fill="#93c5fd" opacity="0.5" rx="1"/>
+        <rect x="345" y="85" width="14" height="173" fill="#dc2626" opacity="0.75" rx="1"/><rect x="365" y="130" width="14" height="128" fill="#dc2626" opacity="0.6" rx="1"/>
+        <rect x="385" y="160" width="14" height="98" fill="#dc2626" opacity="0.45" rx="1"/>
+        <text x="185" y="138" font-size="11" fill="#1e3a8a" font-weight="600">Bulk 噪声</text><text x="400" y="75" font-size="11" fill="#dc2626" font-weight="700">真实信号</text>
+      </svg>
+    </div></div>
+  </div>
+  <div class="slide-footer"><div>04 / 13</div><div>ANALYTICAL BASIS</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 05: 系统架构 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="5">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">ARCHITECTURE</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>02 / 系统体系架构与工程实现</h2><div class="slide-subtitle" data-editable>Full-Stack Data Processing Pipeline</div></div>
+  <div class="content-area" style="flex-direction:column;">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:40px;width:100%;">
+      <div style="background:#fff;padding:25px;border-radius:8px;border:1px solid #e2e8f0;border-top:6px solid #1e3a8a;">
+        <h3 style="font-size:22px;color:#1e3a8a;margin-bottom:10px;">⚙ 计算层 (Backend)</h3>
+        <p style="font-size:16px;margin:0;" data-editable>FastAPI + NumPy/SciPy。调用 LAPACK eigh 实现对称矩阵对角化，6 个 API 端点，SSE 流式 AI 分析。</p>
+      </div>
+      <div style="background:#fff;padding:25px;border-radius:8px;border:1px solid #e2e8f0;border-top:6px solid #10b981;">
+        <h3 style="font-size:22px;color:#10b981;margin-bottom:10px;">▣ 表现层 (Frontend)</h3>
+        <p style="font-size:16px;margin:0;" data-editable>Vue 3 + ECharts。自适应分箱算法、四视图联动、图表面板双向交互、中英文双语。</p>
+      </div>
+      <div style="background:#fff;padding:25px;border-radius:8px;border:1px solid #e2e8f0;border-top:6px solid #f59e0b;">
+        <h3 style="font-size:22px;color:#f59e0b;margin-bottom:10px;">✦ 认知层 (AI Layer)</h3>
+        <p style="font-size:16px;margin:0;" data-editable>OpenAI SDK (SSE)。接收结构化 JSON，独立进行语义翻译，杜绝数学幻觉。</p>
+      </div>
+    </div>
+    <div class="svg-box" style="margin-top:25px;height:155px;padding:0;">
+      <svg viewBox="0 0 1000 155" width="100%" height="100%">
+        <rect x="30" y="38" width="210" height="80" rx="10" fill="#f8fafc" stroke="#1e3a8a" stroke-width="2"/>
+        <text x="135" y="72" text-anchor="middle" font-size="14" fill="#1e3a8a" font-weight="bold">1. CSV 数据上传</text>
+        <text x="135" y="95" text-anchor="middle" font-size="11" fill="#94a3b8" font-family="Roboto Mono">Pandas 自动解析</text>
+        <path d="M 240 78 H 285" stroke="#94a3b8" stroke-width="3" marker-end="url(#a5)"/>
+        <rect x="285" y="38" width="270" height="80" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+        <text x="420" y="72" text-anchor="middle" font-size="14" fill="#065f46" font-weight="bold">2. 预处理与特征值分解</text>
+        <text x="420" y="95" text-anchor="middle" font-size="11" fill="#94a3b8" font-family="Roboto Mono">Z-score → C=XᵀX/n → eigh</text>
+        <path d="M 555 78 H 600" stroke="#94a3b8" stroke-width="3" marker-end="url(#a5)"/>
+        <rect x="600" y="38" width="240" height="80" rx="10" fill="#fefce8" stroke="#f59e0b" stroke-width="2"/>
+        <text x="720" y="72" text-anchor="middle" font-size="14" fill="#92400e" font-weight="bold">3. 结构化 JSON → AI 解释</text>
+        <text x="720" y="95" text-anchor="middle" font-size="11" fill="#94a3b8" font-family="Roboto Mono">SSE 流式 Markdown 报告</text>
+        <path d="M 840 78 H 885" stroke="#94a3b8" stroke-width="3" marker-end="url(#a5)"/>
+        <rect x="885" y="38" width="85" height="80" rx="10" fill="#0f172a"/>
+        <text x="927" y="72" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">4. 决策</text>
+        <text x="927" y="95" text-anchor="middle" font-size="11" fill="#94a3b8" font-family="Roboto Mono">用户</text>
+        <defs><marker id="a5" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L0,10 L8,5 Z" fill="#94a3b8"/></marker></defs>
+      </svg>
+    </div>
+  </div>
+  <div class="slide-footer"><div>05 / 13</div><div>SYSTEM DESIGN</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 06: 数据预处理 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="6">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">DATA ENGINEERING</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>02 / 数据预处理与方差抽取校准</h2><div class="slide-subtitle" data-editable>Ensuring Accurate Spectral Fitting</div></div>
+  <div class="content-area">
+    <div class="col-text">
+      <ul class="custom-bullet">
+        <li data-editable><strong>自动化管道：</strong> 针对跨量纲数据，系统强制 Z-score 标准化 (每列减均值除标准差)，确保 σ²=1。</li>
+        <li data-editable><strong>方差抽取校准：</strong> 当最大特征值占据主导方差时，系统动态计算有效方差 σ²_eff。</li>
+        <li data-editable><strong>缺失值策略：</strong> 支持零填充、列均值填充、删除含缺失行三种策略。</li>
+      </ul>
+    </div>
+    <div class="col-visual">
+      <div class="img-wrapper">
+        <img class="screenshot" src="screenshots/screenshot_01.png" alt="参数控制面板" data-editable-image onerror="this.style.display='none'">
+	<div class="img-upload-overlay"><i class="fa-solid fa-cloud-arrow-up"></i><span>点击替换图片</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div>06 / 13</div><div>DATA ENGINEERING</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 07: 神经符号解耦 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="7">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">NEURO-SYMBOLIC</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>03 / 核心创新：神经符号解耦架构</h2><div class="slide-subtitle" data-editable>Eliminating LLM Hallucinations</div></div>
+  <div class="content-area">
+    <div class="col-text">
+      <p data-editable>为根除大模型在数学推理时的"逻辑幻觉"：</p>
+      <ul class="custom-bullet">
+        <li data-editable><strong>符号端 (Math Engine)：</strong> 矩阵分解、特征值计算等纯数学任务严格交由 Python 后端执行，结果 100% 确定。</li>
+        <li data-editable><strong>神经端 (Neural Layer)：</strong> 剥夺 LLM 的原始数据访问权。它仅接收结构化 JSON 格式的载荷摘要，只负责语义翻译。</li>
+      </ul>
+    </div>
+    <div class="col-visual"><div class="svg-box" style="height:400px;padding:20px;">
+      <svg viewBox="0 0 500 390" width="100%" height="100%">
+        <rect x="30" y="8" width="440" height="115" rx="10" fill="#f8fafc" stroke="#1e3a8a" stroke-width="2"/>
+        <rect x="30" y="8" width="440" height="30" rx="10" fill="#1e3a8a"/><rect x="30" y="24" width="440" height="14" fill="#1e3a8a"/>
+        <text x="250" y="30" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">1. 数值引擎 (Symbolic) — 纯 Python 定式计算</text>
+        <text x="50" y="62" font-size="13" font-family="Roboto Mono" fill="#475569">λ₁=64.97 | λ₊=4.27 | Outliers=3</text>
+        <text x="50" y="84" font-size="13" font-family="Roboto Mono" fill="#475569">IPR: [0.034, 0.042, 0.028, ...]</text>
+        <text x="50" y="106" font-size="13" font-family="Roboto Mono" fill="#475569">Loadings: NVDA(+0.90), MSFT(+0.85)</text>
+        <line x1="250" y1="123" x2="250" y2="175" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="8,4" marker-end="url(#a7)"/>
+        <rect x="200" y="137" width="100" height="24" rx="6" fill="#f1f5f9" stroke="#e2e8f0"/><text x="250" y="154" text-anchor="middle" font-size="11" fill="#64748b" font-family="Roboto Mono">JSON 格式化</text>
+        <rect x="30" y="182" width="440" height="140" rx="10" fill="#ecfdf5" stroke="#10b981" stroke-width="2"/>
+        <rect x="30" y="182" width="440" height="30" rx="10" fill="#10b981"/><rect x="30" y="198" width="440" height="14" fill="#10b981"/>
+        <text x="250" y="204" text-anchor="middle" font-size="14" fill="#fff" font-weight="bold">2. 语义引擎 (Neural) — LLM 仅做翻译</text>
+        <text x="50" y="242" font-size="13" fill="#065f46">"基于输入的因子权重，识别到纳斯达克指数</text>
+        <text x="50" y="265" font-size="13" fill="#065f46">在当前窗口表现出由【算力硬件基建】主导的</text>
+        <text x="50" y="288" font-size="13" fill="#065f46">单一宏观强共振逻辑。"</text>
+        <text x="250" y="355" text-anchor="middle" font-size="11" fill="#94a3b8">LLM 不接触原始矩阵 → 数学可靠性 100%</text>
+        <defs><marker id="a7" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#94a3b8"/></marker></defs>
+      </svg>
+    </div></div>
+  </div>
+  <div class="slide-footer"><div>07 / 13</div><div>INNOVATION HIGHLIGHT</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 08: A/B 盲测 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="8">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">VALIDATION</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>03 / A/B 盲测验证：工程落地的可靠性</h2><div class="slide-subtitle" data-editable>Pure LLM vs. Neuro-Symbolic System</div></div>
+  <div class="content-area" style="justify-content:center;gap:60px;">
+    <div style="text-align:center;border-right:1.5px solid #e2e8f0;padding-right:60px;">
+      <p style="font-size:18px;font-weight:bold;color:#94a3b8;" data-editable>基线方法 (纯 LLM 直接解析)</p>
+      <div class="data-heavy" style="color:#cbd5e1;text-decoration:line-through;font-size:90px;" data-editable>45%</div>
+      <p style="font-size:20px;color:#ef4444;font-weight:bold;" data-editable>致命误判率</p>
+    </div>
+    <div style="text-align:center;">
+      <p style="font-size:18px;font-weight:bold;color:#10b981;" data-editable>本研究 (神经符号架构)</p>
+      <div class="data-heavy" style="color:#10b981;" data-editable>0%</div>
+      <p style="font-size:20px;font-weight:bold;color:#475569;" data-editable>逻辑幻觉率</p>
+    </div>
+  </div>
+  <div class="slide-footer"><div>08 / 13</div><div>VALIDATION</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 09: 纳斯达克 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="9">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">CASE STUDY I</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>04 / 实证 I：纳斯达克"AI 浪潮"共振捕获</h2><div class="slide-subtitle" data-editable>Capturing Macro Structural Shifts</div></div>
+  <div class="content-area">
+    <div class="col-text" style="text-align:center;">
+      <p style="font-size:20px;font-weight:bold;color:#94a3b8;" data-editable>最大特征值 (λ₁)</p>
+      <div class="data-heavy" style="color:#1e3a8a;" data-editable>64.97</div>
+      <p style="font-size:24px;color:#10b981;font-weight:bold;" data-editable>方差解释率：43.3%</p>
+      <p style="font-size:18px;color:#64748b;margin-top:15px;text-align:left;line-height:1.8;" data-editable>* 历史平稳期约 20%。系统自动识别 NVDA、MSFT 为核心载荷，精准定位全市场对"AI 算力基建"的 Market Mode。</p>
+    </div>
+    <div class="col-visual" style="flex-direction:column;gap:6px;">
+      <div class="svg-box" style="padding:15px;">
+        <p style="font-size:12px;font-weight:700;color:#64748b;text-align:center;margin-bottom:8px;">λ₁ 特征向量 — Top-5 成分载荷</p>
+        <svg viewBox="0 0 400 240">
+          <line x1="100" y1="20" x2="100" y2="215" stroke="#e2e8f0" stroke-width="1.5"/>
+          <text x="90" y="50" text-anchor="end" font-size="11" fill="#475569" font-weight="600">NVDA</text><rect x="105" y="37" width="250" height="18" rx="3" fill="#1e3a8a"/><text x="365" y="51" font-size="11" fill="#1e3a8a" font-weight="700" font-family="Oswald">+0.90</text>
+          <text x="90" y="82" text-anchor="end" font-size="11" fill="#475569" font-weight="600">MSFT</text><rect x="105" y="69" width="236" height="18" rx="3" fill="#3b82f6"/><text x="348" y="83" font-size="11" fill="#3b82f6" font-weight="700" font-family="Oswald">+0.85</text>
+          <text x="90" y="114" text-anchor="end" font-size="11" fill="#475569" font-weight="600">GOOGL</text><rect x="105" y="101" width="208" height="18" rx="3" fill="#60a5fa"/><text x="320" y="115" font-size="11" fill="#60a5fa" font-weight="700" font-family="Oswald">+0.75</text>
+          <text x="90" y="146" text-anchor="end" font-size="11" fill="#475569" font-weight="600">AMZN</text><rect x="105" y="133" width="180" height="18" rx="3" fill="#93c5fd"/><text x="292" y="147" font-size="11" fill="#93c5fd" font-weight="700" font-family="Oswald">+0.65</text>
+          <text x="90" y="178" text-anchor="end" font-size="11" fill="#475569" font-weight="600">META</text><rect x="105" y="165" width="152" height="18" rx="3" fill="#bfdbfe"/><text x="264" y="179" font-size="11" fill="#93c5fd" font-weight="700" font-family="Oswald">+0.55</text>
+          <text x="250" y="225" text-anchor="middle" font-size="10" fill="#94a3b8">全部为正 → 同方向宏观共振</text>
+        </svg>
+      </div>
+      <div class="img-wrapper">
+        <img class="screenshot" src="screenshots/screenshot_02.png" alt="特征向量详情" data-editable-image onerror="this.style.display='none'" style="margin-top:6px;">
+	<div class="img-upload-overlay"><i class="fa-solid fa-cloud-arrow-up"></i><span>点击替换图片</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div>09 / 13</div><div>MARKET CASE I</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 10: 标普500 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="10">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">CASE STUDY II</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>04 / 实证 II：危机下的隐性板块极化</h2><div class="slide-subtitle" data-editable>Capturing Sector Bipolarity</div></div>
+  <div class="content-area">
+    <div class="col-text">
+      <p style="font-size:18px;" data-editable><strong>事件背景：</strong> 2022 年全球能源危机期间的 S&P 500 数据。</p>
+      <ul class="custom-bullet">
+        <li data-editable><strong>抓取次级特征：</strong> 剔除大盘 λ₁ 后，系统捕获到异常值 <strong style="color:#dc2626;">λ₂ = 9.71</strong>。</li>
+        <li data-editable><strong>双极对抗：</strong> 能源股 XOM (+0.88) 与科技股 AAPL (−0.76) 载荷正负极端对立。</li>
+        <li data-editable>精准还原了"弃高估值成长股、回流传统能源避险"的板块轮动逻辑。</li>
+      </ul>
+    </div>
+    <div class="col-visual" style="flex-direction:column;gap:6px;">
+      <div class="svg-box" style="padding:15px;">
+        <p style="font-size:12px;font-weight:700;color:#dc2626;text-align:center;margin-bottom:8px;">λ₂ 特征向量 — 跷跷板对抗结构</p>
+        <svg viewBox="0 0 440 240">
+          <line x1="200" y1="20" x2="200" y2="210" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5,3"/>
+          <text x="210" y="40" font-size="11" fill="#475569" font-weight="600">XOM 埃克森美孚</text><rect x="210" y="48" width="195" height="18" rx="3" fill="#dc2626"/><text x="415" y="62" font-size="11" fill="#dc2626" font-weight="700" font-family="Oswald">+0.88</text>
+          <text x="210" y="80" font-size="11" fill="#475569" font-weight="600">CVX 雪佛龙</text><rect x="210" y="88" width="172" height="18" rx="3" fill="#ef4444"/><text x="390" y="102" font-size="11" fill="#dc2626" font-weight="700" font-family="Oswald">+0.75</text>
+          <text x="210" y="120" font-size="11" fill="#475569" font-weight="600">COP 康菲石油</text><rect x="210" y="128" width="148" height="18" rx="3" fill="#f87171"/><text x="366" y="142" font-size="11" fill="#dc2626" font-weight="700" font-family="Oswald">+0.62</text>
+          <text x="195" y="160" text-anchor="end" font-size="11" fill="#475569" font-weight="600">AAPL 苹果</text><rect x="30" y="158" width="165" height="18" rx="3" fill="#1e3a8a"/><text x="25" y="172" text-anchor="end" font-size="11" fill="#1e3a8a" font-weight="700" font-family="Oswald">−0.76</text>
+          <text x="195" y="195" text-anchor="end" font-size="11" fill="#475569" font-weight="600">MSFT 微软</text><rect x="50" y="193" width="145" height="18" rx="3" fill="#3b82f6"/><text x="45" y="207" text-anchor="end" font-size="11" fill="#1e3a8a" font-weight="700" font-family="Oswald">−0.68</text>
+          <text x="310" y="228" text-anchor="middle" font-size="10" fill="#dc2626">能源板块 (正)</text><text x="110" y="228" text-anchor="middle" font-size="10" fill="#1e3a8a">科技板块 (负)</text>
+        </svg>
+      </div>
+      <div class="img-wrapper">
+        <img class="screenshot" src="screenshots/screenshot_03.png" alt="异常信号面板" data-editable-image onerror="this.style.display='none'" style="margin-top:6px;">
+	<div class="img-upload-overlay"><i class="fa-solid fa-cloud-arrow-up"></i><span>点击替换图片</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div>10 / 13</div><div>MARKET CASE II</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 11: 量化回测 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="11">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">APPLICATION</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>04 / 商业落地：RMT 去噪驱动的组合优化</h2><div class="slide-subtitle" data-editable>Sharpe Ratio Optimization</div></div>
+  <div class="content-area">
+    <div class="col-text" style="flex:0 0 56%;">
+      <table style="width:100%;border-collapse:collapse;margin-top:5px;">
+        <tr style="border-bottom:2px solid #0f172a;text-align:left;background:#f8fafc;">
+          <th style="padding:14px;font-size:18px;">核心样本外指标</th><th style="padding:14px;color:#94a3b8;text-align:center;">原始协方差</th><th style="padding:14px;color:#10b981;text-align:center;">RMT 去噪矩阵</th><th style="padding:14px;text-align:center;">改善</th>
+        </tr>
+        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:14px;font-weight:bold;">夏普比率 (Sharpe)</td><td style="text-align:center;">0.82</td><td style="color:#10b981;font-weight:bold;text-align:center;">1.15</td><td style="color:#10b981;font-weight:bold;text-align:center;font-family:Oswald;font-size:20px;">+40%</td></tr>
+        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:14px;font-weight:bold;">月均换手率</td><td style="text-align:center;">85.4%</td><td style="color:#10b981;font-weight:bold;text-align:center;">22.1%</td><td style="color:#10b981;font-weight:bold;text-align:center;font-family:Oswald;font-size:20px;">−74%</td></tr>
+        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:14px;font-weight:bold;">最大回撤</td><td style="text-align:center;">−18.3%</td><td style="color:#10b981;font-weight:bold;text-align:center;">−9.7%</td><td style="color:#10b981;font-weight:bold;text-align:center;font-family:Oswald;font-size:20px;">−47%</td></tr>
+        <tr><td style="padding:14px;font-weight:bold;">协方差条件数</td><td style="text-align:center;">1,248</td><td style="color:#10b981;font-weight:bold;text-align:center;">42</td><td style="color:#10b981;font-weight:bold;text-align:center;font-family:Oswald;font-size:20px;">−97%</td></tr>
+      </table>
+    </div>
+    <div class="col-visual" style="flex:0 0 40%;flex-direction:column;gap:12px;">
+      <div style="background:#f0fdf4;border:1.5px solid #10b981;padding:22px;border-radius:8px;">
+        <p style="margin:0;color:#065f46;font-size:17px;font-weight:bold;line-height:1.7;" data-editable>RMT 特征值截断将条件数从 1,248 降至 42，求解逆矩阵时数值稳定性大幅提升。</p>
+      </div>
+      <div class="img-wrapper">
+        <img class="screenshot" src="screenshots/screenshot_04.png" alt="RMT降噪热力图" data-editable-image onerror="this.style.display='none'" style="margin-top:8px;">
+	<div class="img-upload-overlay"><i class="fa-solid fa-cloud-arrow-up"></i><span>点击替换图片</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div>11 / 13</div><div>QUANTITATIVE RESULT</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 12: 总结 ═══════════════════════ -->
+<div class="slide-container grid-bg" data-slide="12">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="slide-header"><div class="header-logo-group"><img src="https://image-res.cloudinary.com/image/upload/v1741147137/logo_nsu_vptfzd.png"><div class="header-divider"></div><div class="header-text">CONCLUSION</div></div></div>
+  <div class="slide-title-area"><h2 class="slide-title" data-editable>05 / 总结与工程严谨性自审</h2><div class="slide-subtitle" data-editable>Conclusion &amp; Future Roadmap</div></div>
+  <div class="content-area">
+    <div class="col-text">
+      <h3 style="margin-bottom:20px;color:#10b981;font-size:26px;">核心交付：</h3>
+      <ul class="custom-bullet" style="font-size:22px;">
+        <li data-editable>以完整的<strong>产品级形态</strong>填补了国内 RMT 可视化分析工具的空白。</li>
+        <li data-editable>跑通了"数值引擎 + LLM 语义映射"的<strong>零幻觉</strong>分析新范式。</li>
+        <li data-editable>真实数据实证 + GMV 回测夏普比率提升 40%。</li>
+      </ul>
+    </div>
+    <div class="col-visual"><div style="background:#fff1f2;border:1px solid #fecdd3;padding:30px;border-radius:4px;border-left:8px solid #e11d48;">
+      <h3 style="color:#be123c;margin-bottom:15px;font-size:24px;">⚠ 自我检视 (未来计划)</h3>
+      <p style="font-size:17px;font-weight:bold;color:#881337;line-height:1.7;margin:0;" data-editable>"目前采用 M-P 律硬截断。计划引入 <strong>Tracy-Widom 分布</strong>为离群特征值附加精确的 p-value，提升统计严谨性。"</p>
+    </div></div>
+  </div>
+  <div class="slide-footer"><div>12 / 13</div><div>CONCLUSION &amp; OUTLOOK</div></div>
+</div>
+
+<!-- ═══════════════════════ PAGE 13: Q&A ═══════════════════════ -->
+<div class="slide-container qa-layout" data-slide="13">
+  <div class="edit-indicator">✎ 可编辑</div>
+  <div class="qa-huge">Q&amp;A</div>
+  <div class="qa-title" data-editable>感谢各位老师的指导</div>
+  <div class="qa-sub" data-editable>敬 请 批 评 指 正</div>
+  <div style="width:60px;height:6px;background:#10b981;border-radius:4px;margin-bottom:50px;z-index:1;"></div>
+  <div class="qa-card">
+    <div class="qr-box"><i class="fa-solid fa-qrcode" style="font-size:100px;color:#e2e8f0;"></i></div>
+    <div class="qa-info">
+      <h3 style="font-size:32px;color:#0f172a;margin-bottom:8px;" data-editable>刘俊佑</h3>
+      <p style="font-size:14px;color:#94a3b8;font-family:'Roboto Mono';font-weight:bold;" data-editable>DATA SCIENCE &amp; BIG DATA TECHNOLOGY | 2026</p>
+      <div style="margin-top:20px;font-size:12px;color:#cbd5e1;font-weight:bold;">GCTB-NSU Joint Institute of Technology</div>
+    </div>
+  </div>
+  <div class="slide-footer" style="justify-content:center;bottom:30px;"><div style="font-size:14px;font-family:'Roboto Mono';color:#cbd5e1;">GITHUB.COM/CHNSPACE306/RMT</div></div>
+</div>
+
+<!-- ═══════════════════════ SCRIPTS ═══════════════════════ -->
+<script>
+let editMode = false;
+
+function toggleEditMode() {
+  editMode = !editMode;
+  document.body.classList.toggle('editing', editMode);
+  const btn = document.getElementById('btnEdit');
+  const label = document.getElementById('btnEditLabel');
+  const addImgBtn = document.getElementById('btnAddImg');
+  const status = document.getElementById('toolbar-status');
+
+  if (editMode) {
+    btn.classList.add('active');
+    label.textContent = '退出编辑';
+    addImgBtn.style.display = 'flex';
+    status.textContent = '双击文字编辑 | 点击图片替换';
+  } else {
+    btn.classList.remove('active');
+    label.textContent = '开启编辑';
+    addImgBtn.style.display = 'none';
+    status.textContent = '';
+  }
+}
+
+// Image click to replace
+document.querySelectorAll('[data-editable-image]').forEach(img => {
+  img.addEventListener('click', function(e) {
+    if (!editMode) return;
+    e.stopPropagation();
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = function(ev) {
+      const file = ev.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(r) {
+        img.src = r.target.result;
+        img.style.display = '';
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  });
+});
+
+// "Insert Image" toolbar button — add a new image to the current slide (or body)
+function addImageToSlide() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = function(ev) {
+    const file = ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(r) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'img-wrapper';
+      wrapper.style.cssText = 'width:60%; margin:10px auto; display:block;';
+      const img = document.createElement('img');
+      img.className = 'screenshot';
+      img.src = r.target.result;
+      img.setAttribute('data-editable-image', '');
+      img.style.cssText = 'width:100%;';
+      img.addEventListener('click', function(e) {
+        if (!editMode) return;
+        e.stopPropagation();
+        const inp2 = document.createElement('input');
+        inp2.type = 'file'; inp2.accept = 'image/*';
+        inp2.onchange = function(ev2) {
+          const f2 = ev2.target.files[0];
+          if (!f2) return;
+          const r2 = new FileReader();
+          r2.onload = function(rr) { img.src = rr.target.result; img.style.display = ''; };
+          r2.readAsDataURL(f2);
+        };
+        inp2.click();
+      });
+      wrapper.appendChild(img);
+      document.body.appendChild(wrapper);
+      wrapper.scrollIntoView({ behavior: 'smooth' });
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+// ═══════════ PPTX EXPORT ═══════════
+async function exportToPPTX() {
+  const loading = document.getElementById('export-loading');
+  loading.style.display = 'flex';
+
+  try {
+    const PptxGenJS = window.PptxGenJS;
+    const pres = new PptxGenJS();
+    pres.defineLayout({ name:'WIDE', width:13.333, height:7.5 });
+    pres.layout = 'WIDE';
+
+    const slides = document.querySelectorAll('.slide-container');
+    for (let i = 0; i < slides.length; i++) {
+      const slide = slides[i];
+      // temporarily disable edit indicators for clean capture
+      const indicators = slide.querySelectorAll('.edit-indicator');
+      indicators.forEach(el => el.style.display = 'none');
+      const overlays = slide.querySelectorAll('.img-upload-overlay');
+      overlays.forEach(el => el.style.display = 'none');
+
+      const canvas = await html2canvas(slide, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff'
+      });
+
+      // restore
+      if (editMode) {
+        indicators.forEach(el => el.style.display = 'block');
+        overlays.forEach(el => el.style.display = 'flex');
+      }
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const pptSlide = pres.addSlide();
+      pptSlide.addImage({ data: dataUrl, x:0, y:0, w:13.333, h:7.5 });
+    }
+
+    await pres.writeFile({ fileName: 'RMT_Analytics_答辩演示.pptx' });
+  } catch(e) {
+    alert('导出失败：' + e.message);
+    console.error(e);
+  } finally {
+    loading.style.display = 'none';
+  }
+}
+</script>
+</body>
+</html>

@@ -60,6 +60,7 @@ class MPResponse(BaseModel):
     # 新增：异常特征值的特征向量高权重成分
     outlier_eigenvectors: List[OutlierEigenvector] = []
     column_names: List[str] = []
+    time_labels: List[str] = []
     ipr: List[float] = []
     cleaned_heatmap_base64: Optional[str] = None
 

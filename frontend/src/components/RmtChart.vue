@@ -235,7 +235,7 @@ const exportChart = () => {
 };
 defineExpose({ exportChart });
 
-watch(() => [props.eigenvalues, props.theoreticalCurve, props.bins, props.model, props.normType, props.lang], () => {
+watch(() => [props.eigenvalues, props.theoreticalCurve, props.bins, props.model, props.normType, props.lang, props.lambdaPlus, props.lambdaMinus], () => {
   renderChart();
 }, { deep: true });
 

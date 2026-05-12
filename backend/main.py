@@ -1,21 +1,20 @@
 import matplotlib
 matplotlib.use('Agg')
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
-import pandas as pd
+# 彻底移除 pandas 依赖以解决导入挂起问题
 import io
 import os
 import warnings
 import csv as csv_mod
-import matplotlib.pyplot as plt
 import base64
 
 from backend.schemas import WignerRequest, WignerResponse, TheoreticalCurve, MPRequest, MPResponse, AnalyzeRequest, OutlierEigenvector, TopComponent, RollingResponse, HeatmapResponse
 from backend.rmt_core import generate_goe_eigenvalues, wigner_semicircle_pdf, generate_mp_eigenvalues, mp_pdf
 
-app = FastAPI(title="RMT Backend API", version="1.0.0")
+app = FastAPI(title="RMT Backend API (No-Pandas Edition)", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,133 +24,174 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ====== 核心逻辑提取：矩阵处理与分析函数 ======
-def process_dataframe(df: pd.DataFrame, scale: float, fill_strategy: str, standardize: bool):
-    """
-    统一的矩阵分析引擎，支持 CSV 导入和本地加载。
-    包含：预处理、RMT 分析、IPR 计算、降噪热力图生成。
-    """
-    column_names = df.columns.tolist()
+# ====== 辅助函数：原生 CSV 处理 ======
+
+def native_load_csv(content_stream):
+    """使用原生 csv 模块读取数据，返回 (headers, data_rows)"""
+    reader = csv_mod.reader(content_stream)
+    try:
+        headers = next(reader)
+    except StopIteration:
+        return [], []
     
-    # 转换为 numpy 数组
-    mat = df.values.astype(float)
+    rows = []
+    for row in reader:
+        if any(row): # 忽略空行
+            rows.append(row)
+    return headers, rows
+
+def extract_time_labels_native(headers, rows):
+    """
+    原生实现的时间列识别逻辑
+    返回 (time_labels, numeric_matrix, remaining_headers)
+    """
+    time_keywords = ['date', 'time', 'timestamp', 'year', 'month', 'day', '日期', '时间', '成交日期', 'datetime', 'period', 'unnamed: 0', 'index']
     
-    # 基础清洗
-    mat = mat[~np.isnan(mat).all(axis=1)]
-    if mat.size > 0:
-        mat = mat[:, ~np.isnan(mat).all(axis=0)]
+    time_col_idx = -1
+    # 1. 关键字匹配
+    for i, h in enumerate(headers):
+        if any(k in h.lower() for k in time_keywords):
+            time_col_idx = i
+            break
+            
+    # 2. 如果没匹配到，看第一列是否为非数值
+    if time_col_idx == -1 and len(rows) > 0:
+        try:
+            float(rows[0][0])
+        except (ValueError, IndexError):
+            time_col_idx = 0
+            
+    time_labels = []
+    numeric_data = []
+    new_headers = []
+    
+    for i, h in enumerate(headers):
+        if i != time_col_idx:
+            new_headers.append(h)
+            
+    for row in rows:
+        if time_col_idx != -1:
+            time_labels.append(row[time_col_idx])
+            numeric_row = [row[j] for j in range(len(row)) if j != time_col_idx]
+        else:
+            numeric_row = row
+            
+        # 尝试转为 float
+        cleaned_row = []
+        for val in numeric_row:
+            try:
+                cleaned_row.append(float(val))
+            except ValueError:
+                cleaned_row.append(np.nan)
+        numeric_data.append(cleaned_row)
         
-    if mat.size > 0:
-        sparsity = 1.0 - (np.count_nonzero(np.nan_to_num(mat, nan=0.0)) / mat.size)
-    else:
-        sparsity = 0.0
+    return time_labels, np.array(numeric_data), new_headers
+
+# ====== 核心逻辑：分析与处理 ======
+
+def process_matrix(mat, headers, scale, fill_strategy, standardize, time_labels=[]):
+    """统一的矩阵分析引擎 (Numpy 原生版)"""
+    n, p = mat.shape
+    if n == 0 or p == 0:
+        raise HTTPException(status_code=400, detail="Empty numeric matrix")
 
     # 填充策略
     if fill_strategy == 'mean':
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            col_mean = np.nanmean(mat, axis=0)
-            col_mean = np.nan_to_num(col_mean, nan=0.0)
-        inds = np.where(np.isnan(mat))
-        mat[inds] = np.take(col_mean, inds[1])
-    elif fill_strategy == 'drop':
-        mat = mat[~np.isnan(mat).any(axis=1)]
+        col_means = np.nanmean(mat, axis=0)
+        col_means = np.nan_to_num(col_means, nan=0.0)
+        for i in range(p):
+            mask = np.isnan(mat[:, i])
+            mat[mask, i] = col_means[i]
     else:
         mat = np.nan_to_num(mat, nan=0.0)
 
-    n, p = mat.shape
-    q = p / n if n > 0 else 1.0
+    sparsity = 1.0 - (np.count_nonzero(mat) / mat.size) if mat.size > 0 else 0.0
     
-    eigenvectors = None
-    C = None
-    if n > 1 and p > 0:
-        if standardize:
-            stds = np.std(mat, axis=0)
-            stds[stds == 0] = 1.0
-            mat = (mat - np.mean(mat, axis=0)) / stds
-            
-        centered = mat - np.mean(mat, axis=0)
-        C = (1.0 / n) * np.dot(centered.T, centered)
-        eigenvalues, eigenvectors = np.linalg.eigh(C)
-    else:
-        eigenvalues = np.array([])
-        
     if standardize:
+        means = np.mean(mat, axis=0)
+        stds = np.std(mat, axis=0)
+        stds[stds == 0] = 1.0
+        mat = (mat - means) / stds
         sigma_sq = 1.0
-    elif len(eigenvalues) > 0:
-        sigma_sq = float(np.mean(eigenvalues))
     else:
         sigma_sq = scale ** 2
-         
+
+    q = p / n if n > 0 else 1.0
+    centered = mat - np.mean(mat, axis=0)
+    C = (1.0 / n) * np.dot(centered.T, centered)
+    eigenvalues, eigenvectors = np.linalg.eigh(C)
+    
     lambda_plus = sigma_sq * (1 + np.sqrt(q))**2
     lambda_minus = sigma_sq * (1 - np.sqrt(q))**2
     
-    outlier_eigenvectors: list[OutlierEigenvector] = []
-    ipr = []
+    outlier_eigenvectors = []
+    sorted_indices = np.argsort(eigenvalues)[::-1]
+    rank = 0
+    for idx in sorted_indices:
+        ev = float(eigenvalues[idx])
+        if ev <= lambda_plus: break
+        rank += 1
+        vec = eigenvectors[:, idx]
+        abs_vec = np.abs(vec)
+        top_k = min(5, len(vec))
+        top_indices = np.argsort(abs_vec)[::-1][:top_k]
+        
+        components = []
+        for ci in top_indices:
+            name = headers[int(ci)] if int(ci) < len(headers) else f"Col_{int(ci)}"
+            components.append(TopComponent(column_index=int(ci), column_name=name, weight=float(vec[ci]), abs_weight=float(abs_vec[ci])))
+        
+        outlier_eigenvectors.append(OutlierEigenvector(eigenvalue=ev, rank=rank, top_components=components, vector=[float(v) for v in vec]))
+        if rank >= 10: break
+
+    # IPR
+    ipr = np.sum(eigenvectors**4, axis=0).tolist()
+    
+    # 降噪热力图生成 (Numpy 原生版)
     cleaned_heatmap_base64 = None
+    try:
+        # 识别信号成分
+        signal_indices = np.where(eigenvalues > lambda_plus)[0]
+        if len(signal_indices) > 0:
+            bulk_indices = np.where(eigenvalues <= lambda_plus)[0]
+            avg_bulk_ev = np.mean(eigenvalues[bulk_indices]) if len(bulk_indices) > 0 else 0
+            
+            # 重构相关系数矩阵
+            C_clean = np.zeros_like(C)
+            for i in range(len(eigenvalues)):
+                ev = eigenvalues[i] if i in signal_indices else avg_bulk_ev
+                v = eigenvectors[:, i:i+1]
+                C_clean += ev * np.dot(v, v.T)
+            
+            # 归一化为相关系数矩阵（对角线为1）
+            d = np.sqrt(np.diag(C_clean))
+            d[d == 0] = 1.0
+            C_clean = C_clean / np.outer(d, d)
+        else:
+            C_clean = C
 
-    if eigenvectors is not None and len(eigenvalues) > 0:
-        # eigh 返回从小到大，转为从大到小
-        sorted_indices = np.argsort(eigenvalues)[::-1]
+        import matplotlib.pyplot as plt
+        plt.style.use('dark_background')
+        fig, axes = plt.subplots(1, 2, figsize=(10, 4), facecolor='#1c1c1e')
         
-        rank = 0
-        for idx in sorted_indices:
-            ev = float(eigenvalues[idx])
-            if ev <= lambda_plus:
-                break
-            rank += 1
-            vec = eigenvectors[:, idx]
-            abs_vec = np.abs(vec)
-            top_k = min(5, len(vec))
-            top_indices = np.argsort(abs_vec)[::-1][:top_k]
-            
-            components = []
-            for ci in top_indices:
-                name = column_names[int(ci)] if int(ci) < len(column_names) else f"Col_{int(ci)}"
-                components.append(TopComponent(
-                    column_index=int(ci), column_name=name,
-                    weight=float(vec[ci]), abs_weight=float(abs_vec[ci])
-                ))
-            
-            outlier_eigenvectors.append(OutlierEigenvector(
-                eigenvalue=ev, rank=rank, top_components=components,
-                vector=[float(v) for v in vec]
-            ))
-            if rank >= 10: break
+        im0 = axes[0].imshow(C, cmap='coolwarm', vmin=-1, vmax=1)
+        axes[0].set_title('Original Correlation', color='white', fontsize=10)
+        axes[0].axis('off')
         
-        # IPR & Heatmap
-        ipr = np.sum(eigenvectors**4, axis=0).tolist()
-        try:
-            signal_indices = np.where(eigenvalues > lambda_plus)[0]
-            if len(signal_indices) > 0:
-                bulk_indices = np.where(eigenvalues <= lambda_plus)[0]
-                avg_bulk_ev = np.mean(eigenvalues[bulk_indices]) if len(bulk_indices) > 0 else 0
-                C_clean = np.zeros_like(C)
-                for i in range(len(eigenvalues)):
-                    ev = eigenvalues[i] if i in signal_indices else avg_bulk_ev
-                    v = eigenvectors[:, i:i+1]
-                    C_clean += ev * np.dot(v, v.T)
-                d = np.sqrt(np.diag(C_clean))
-                C_clean = C_clean / np.outer(d, d)
-            else:
-                C_clean = C
-            
-            plt.style.use('dark_background')
-            fig, axes = plt.subplots(1, 2, figsize=(12, 5), facecolor='#1c1c1e')
-            axes[0].imshow(C, cmap='coolwarm', vmin=-1, vmax=1)
-            axes[0].set_title('Original Correlation', color='white')
-            axes[0].axis('off')
-            axes[1].imshow(C_clean, cmap='coolwarm', vmin=-1, vmax=1)
-            axes[1].set_title('RMT Cleaned', color='white')
-            axes[1].axis('off')
-            plt.tight_layout()
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', bbox_inches='tight', dpi=120)
-            plt.close(fig)
-            buf.seek(0)
-            cleaned_heatmap_base64 = "data:image/png;base64," + base64.b64encode(buf.read()).decode('utf-8')
-        except: pass
+        im1 = axes[1].imshow(C_clean, cmap='coolwarm', vmin=-1, vmax=1)
+        axes[1].set_title('RMT Cleaned', color='white', fontsize=10)
+        axes[1].axis('off')
+        
+        plt.tight_layout()
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+        plt.close(fig)
+        buf.seek(0)
+        cleaned_heatmap_base64 = "data:image/png;base64," + base64.b64encode(buf.read()).decode('utf-8')
+    except Exception as e:
+        print(f"Heatmap generation error: {e}")
 
+    # 理论曲线
     x_start = max(0.01, lambda_minus - 0.5 * sigma_sq)
     x_end = lambda_plus + 0.5 * sigma_sq
     x_theory = np.linspace(x_start, x_end, 200)
@@ -162,112 +202,61 @@ def process_dataframe(df: pd.DataFrame, scale: float, fill_strategy: str, standa
         eigenvalues=eigenvalues.tolist(),
         theoretical_curve=TheoreticalCurve(x=x_theory.tolist(), y=y_theory.tolist()),
         sparsity=sparsity, n=n, p=p,
-        outlier_eigenvectors=outlier_eigenvectors, column_names=column_names,
-        ipr=ipr, cleaned_heatmap_base64=cleaned_heatmap_base64
+        outlier_eigenvectors=outlier_eigenvectors, column_names=headers,
+        time_labels=time_labels, ipr=ipr, cleaned_heatmap_base64=cleaned_heatmap_base64
     )
+
 
 # ====== 路由接口 ======
 
 @app.get("/")
 def health_check():
-    return {"status": "ok", "message": "RMT Backend is running"}
+    return {"status": "ok", "mode": "no-pandas"}
 
 def get_datasets_dir():
-    search_dirs = [
-        os.path.join(os.path.dirname(__file__), "Datasets"),
-        "backend/Datasets",
-        "Datasets",
-        "/app/backend/Datasets",
-        "/app/Datasets"
-    ]
+    search_dirs = [os.path.join(os.path.dirname(__file__), "Datasets"), "backend/Datasets", "Datasets"]
     for d in search_dirs:
-        abs_p = os.path.abspath(d)
-        if os.path.exists(abs_p) and os.path.isdir(abs_p):
-            # 至少包含一个 csv 才算有效
-            if any(f.endswith('.csv') for f in os.listdir(abs_p)):
-                return abs_p
+        if os.path.exists(d) and os.path.isdir(d):
+            return os.path.abspath(d)
     return None
 
 @app.get("/api/rmt/examples")
 async def list_examples():
     d = get_datasets_dir()
-    if not d:
-        print("DEBUG: No Datasets directory found!")
-        return []
+    if not d: return []
     return [f for f in os.listdir(d) if f.endswith('.csv')]
 
 @app.post("/api/rmt/use_example", response_model=MPResponse)
-async def use_example(
-    name: str = Form(...),
-    scale: float = Form(1.0),
-    fill_strategy: str = Form("zero"),
-    standardize: str = Form("true")
-):
-    datasets_dir = get_datasets_dir()
-    if not datasets_dir:
-        raise HTTPException(status_code=404, detail="Datasets directory not found")
-        
-    file_path = os.path.join(datasets_dir, name)
-    if not os.path.exists(file_path):
-        # 尝试二次搜索（万一文件被移动到别的探测路径了）
-        search_dirs = ["Datasets", "backend/Datasets", "/app/backend/Datasets"]
-        found = False
-        for d in search_dirs:
-            p = os.path.join(os.path.abspath(d), name)
-            if os.path.exists(p):
-                file_path = p
-                found = True
-                break
-        if not found:
-            raise HTTPException(status_code=404, detail=f"Dataset {name} not found in {datasets_dir}")
+async def use_example(name: str = Form(...), scale: float = Form(1.0), fill_strategy: str = Form("zero"), standardize: str = Form("true"), start_row: int = Form(0), end_row: int = Form(-1)):
+    d = get_datasets_dir()
+    if not d: raise HTTPException(status_code=404)
+    file_path = os.path.join(d, name)
     
-    try:
-        df = pd.read_csv(file_path)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"CSV read error: {str(e)}")
+    with open(file_path, 'r', encoding='utf-8') as f:
+        headers, rows = native_load_csv(f)
     
-    # --- 增强：自动清洗非数值列 ---
-    # 记录原始列名，用于后续特征向量对应
-    all_columns = df.columns.tolist()
+    time_labels, mat, numeric_headers = extract_time_labels_native(headers, rows)
     
-    # 自动识别并保留数值型列
-    numeric_df = df.select_dtypes(include=[np.number])
-    
-    if numeric_df.empty:
-        # 如果没有数值列，尝试强制转换（排除第一列日期后）
-        for col in df.columns[1:]:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        numeric_df = df.select_dtypes(include=[np.number])
-
-    if numeric_df.empty:
-        raise HTTPException(status_code=400, detail="The dataset contains no valid numeric columns for RMT analysis.")
+    # 切片
+    if end_row == -1: end_row = len(mat)
+    mat = mat[start_row:end_row]
+    slice_labels = time_labels[start_row:end_row] if time_labels else []
     
     is_std = standardize.lower() == "true"
-    return process_dataframe(numeric_df, scale, fill_strategy, is_std)
+    return process_matrix(mat, numeric_headers, scale, fill_strategy, is_std, time_labels) # 返回全量时间标签以供滑动条
 
 @app.post("/api/rmt/upload", response_model=MPResponse)
-async def upload_matrix(
-    file: UploadFile = File(...), 
-    scale: float = Form(...), 
-    fill_strategy: str = Form("zero"),
-    standardize: str = Form("true")
-):
+async def upload_matrix(file: UploadFile = File(...), scale: float = Form(...), fill_strategy: str = Form("zero"), standardize: str = Form("true"), start_row: int = Form(0), end_row: int = Form(-1)):
     contents = await file.read()
-    df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
+    f = io.StringIO(contents.decode("utf-8"))
+    headers, rows = native_load_csv(f)
+    time_labels, mat, numeric_headers = extract_time_labels_native(headers, rows)
     
-    # 自动过滤非数值列
-    numeric_df = df.select_dtypes(include=[np.number])
-    if numeric_df.empty:
-        # 尝试强制转换排除日期后的列
-        for col in df.columns[1:]:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-        numeric_df = df.select_dtypes(include=[np.number])
-        
-    if numeric_df.empty:
-        raise HTTPException(status_code=400, detail="No numeric columns found in the uploaded CSV.")
-        
+    if end_row == -1: end_row = len(mat)
+    mat = mat[start_row:end_row]
+    
     is_std = standardize.lower() == "true"
-    return process_dataframe(numeric_df, scale, fill_strategy, is_std)
+    return process_matrix(mat, numeric_headers, scale, fill_strategy, is_std, time_labels)
 
 @app.post("/api/rmt/wigner", response_model=WignerResponse)
 def get_wigner_data(req: WignerRequest):
@@ -275,89 +264,74 @@ def get_wigner_data(req: WignerRequest):
     r = 2 * req.scale * np.sqrt(req.n)
     x_theory = np.linspace(-r * 1.1, r * 1.1, 500)
     y_theory = wigner_semicircle_pdf(x_theory, r)
-    return WignerResponse(
-        eigenvalues=eigenvalues.tolist(),
-        theoretical_curve=TheoreticalCurve(x=x_theory.tolist(), y=y_theory.tolist())
-    )
+    return WignerResponse(eigenvalues=eigenvalues.tolist(), theoretical_curve=TheoreticalCurve(x=x_theory.tolist(), y=y_theory.tolist()))
 
 @app.post("/api/rmt/mp", response_model=MPResponse)
 def get_mp_data(req: MPRequest):
     q = req.p / req.n
     sigma_sq = req.scale ** 2
+    eigenvalues = generate_mp_eigenvalues(req.n, req.p, req.scale)
     lambda_plus = sigma_sq * (1 + np.sqrt(q))**2
     lambda_minus = sigma_sq * (1 - np.sqrt(q))**2
-    eigenvalues = generate_mp_eigenvalues(req.n, req.p, req.scale)
-    x_start = max(0.01, lambda_minus - 0.5)
-    x_end = lambda_plus + 0.5
-    x_theory = np.linspace(x_start, x_end, 200)
+    x_theory = np.linspace(max(0.01, lambda_minus-0.5), lambda_plus+0.5, 200)
     y_theory = mp_pdf(x_theory, q, sigma_sq)
-    return MPResponse(
-        q=q, lambda_plus=lambda_plus, lambda_minus=lambda_minus,
-        eigenvalues=eigenvalues.tolist(),
-        theoretical_curve=TheoreticalCurve(x=x_theory.tolist(), y=y_theory.tolist())
-    )
+    return MPResponse(q=q, lambda_plus=lambda_plus, lambda_minus=lambda_minus, eigenvalues=eigenvalues.tolist(), theoretical_curve=TheoreticalCurve(x=x_theory.tolist(), y=y_theory.tolist()))
 
-@app.post("/api/rmt/analyze")
-async def analyze_rmt(req: AnalyzeRequest):
-    from openai import AsyncOpenAI
-    client = AsyncOpenAI(api_key=req.api_key if req.api_key else "sk-none", base_url=req.base_url)
-    eigvec_section = f"\n【特征向量分析】\n{req.eigenvector_summary}" if req.eigenvector_summary else ""
-    prompt = f"分析数据集 {req.dataset_name}。维度 q={req.q:.4f}, 异常值数量={req.outlier_count}。核心特征值: {req.top_eigenvalues}. {eigvec_section}"
-    async def stream_generator():
-        try:
-            stream = await client.chat.completions.create(
-                model=req.model_name,
-                messages=[{"role": "user", "content": prompt}],
-                stream=True
-            )
-            async for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-        except Exception as e:
-            yield f"AI 分析暂时不可用: {str(e)}"
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+# ====== 滚动分析逻辑 (Numpy 原生版) ======
 
-# 保留 Rolling 和 Heatmap Rebuild 逻辑（略作优化以适配 process_dataframe 的改进）
-def run_rolling_analysis_logic(df, window_size, step_size, standardize):
-    if df.dtypes.iloc[0] == 'object' or pd.api.types.is_datetime64_any_dtype(df.dtypes.iloc[0]):
-        times = df.iloc[:, 0].astype(str).tolist()
-        df = df.iloc[:, 1:]
-    else:
-        times = [str(i) for i in range(len(df))]
+def run_rolling_analysis_logic(headers, rows, window_size, step_size, standardize):
+    """滚动分析的原生 Numpy 实现"""
+    times, mat, _ = extract_time_labels_native(headers, rows)
+    if not times:
+        times = [str(i) for i in range(len(rows))]
     
-    # 仅保留数值列
-    df = df.select_dtypes(include=[np.number])
-    mat = df.dropna().values.astype(float)
     n, p = mat.shape
+    if n < window_size:
+        raise HTTPException(status_code=400, detail=f"Dataset rows ({n}) less than window size ({window_size})")
+
     is_std = standardize.lower() == "true"
     res_times, res_l1 = [], []
     
+    # 遍历滑动窗口
     for start in range(0, n - window_size + 1, step_size):
         end = start + window_size
         win = mat[start:end, :]
+        
+        # 填充 NaN
+        win = np.nan_to_num(win, nan=0.0)
+        
         if is_std:
-            win = (win - np.mean(win, axis=0)) / (np.std(win, axis=0) + 1e-9)
-        C = (1.0 / window_size) * np.dot(win.T, win)
+            means = np.mean(win, axis=0)
+            stds = np.std(win, axis=0)
+            stds[stds == 0] = 1.0
+            win = (win - means) / stds
+            
+        centered = win - np.mean(win, axis=0)
+        C = (1.0 / window_size) * np.dot(centered.T, centered)
         evs = np.linalg.eigvalsh(C)
         res_l1.append(float(np.max(evs)))
+        # 时间戳取窗口终点
         res_times.append(times[min(end-1, len(times)-1)])
+        
     return RollingResponse(times=res_times, lambda_1=res_l1)
 
 @app.post("/api/rmt/rolling", response_model=RollingResponse)
 async def analyze_rolling(file: UploadFile = File(...), window_size: int = Form(60), step_size: int = Form(1), standardize: str = Form("true")):
     contents = await file.read()
-    df = pd.read_csv(io.StringIO(contents.decode("utf-8")))
-    return run_rolling_analysis_logic(df, window_size, step_size, standardize)
+    f = io.StringIO(contents.decode("utf-8"))
+    headers, rows = native_load_csv(f)
+    return run_rolling_analysis_logic(headers, rows, window_size, step_size, standardize)
 
 @app.post("/api/rmt/rolling_example", response_model=RollingResponse)
 async def rolling_example(name: str = Form(...), window_size: int = Form(60), step_size: int = Form(1), standardize: str = Form("true")):
-    datasets_dir = get_datasets_dir()
-    if not datasets_dir: raise HTTPException(status_code=404)
-    file_path = os.path.join(datasets_dir, name)
-    df = pd.read_csv(file_path)
-    return run_rolling_analysis_logic(df, window_size, step_size, standardize)
+    d = get_datasets_dir()
+    if not d: raise HTTPException(status_code=404)
+    file_path = os.path.join(d, name)
+    with open(file_path, 'r', encoding='utf-8') as f:
+        headers, rows = native_load_csv(f)
+    return run_rolling_analysis_logic(headers, rows, window_size, step_size, standardize)
 
-@app.post("/api/rmt/heatmap_rebuild", response_model=HeatmapResponse)
-async def heatmap_rebuild(file: UploadFile = File(...), top_k: int = Form(-1), scale: float = Form(1.0), fill_strategy: str = Form("zero"), standardize: str = Form("true")):
-    # 逻辑同上，略
-    return HeatmapResponse(cleaned_heatmap_base64="")
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8888)
+
