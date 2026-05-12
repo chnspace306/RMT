@@ -277,7 +277,38 @@ def get_mp_data(req: MPRequest):
     y_theory = mp_pdf(x_theory, q, sigma_sq)
     return MPResponse(q=q, lambda_plus=lambda_plus, lambda_minus=lambda_minus, eigenvalues=eigenvalues.tolist(), theoretical_curve=TheoreticalCurve(x=x_theory.tolist(), y=y_theory.tolist()))
 
+@app.post("/api/rmt/analyze")
+async def analyze_rmt(req: AnalyzeRequest):
+    """AI 分析接口：基于 OpenAI SDK 的流式返回"""
+    try:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=req.api_key if req.api_key else "sk-none", base_url=req.base_url)
+        
+        eigvec_section = f"\n【特征向量分析】\n{req.eigenvector_summary}" if req.eigenvector_summary else ""
+        prompt = f"请作为金融随机矩阵理论专家，分析数据集 {req.dataset_name}。数据维度 q={req.q:.4f}, 异常值数量={req.outlier_count}。核心特征值: {req.top_eigenvalues}. {eigvec_section}"
+        
+        async def stream_generator():
+            try:
+                stream = await client.chat.completions.create(
+                    model=req.model_name,
+                    messages=[
+                        {"role": "system", "content": "你是一个专业的金融随机矩阵理论 (RMT) 分析助手。请根据提供的特征值和维度信息，分析市场的相关性结构、是否存在显著的集体行为（市场模态）以及噪声水平。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    stream=True
+                )
+                async for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
+            except Exception as e:
+                yield f"AI 分析生成失败: {str(e)}"
+        
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI 模块调用失败: {str(e)}")
+
 # ====== 滚动分析逻辑 (Numpy 原生版) ======
+
 
 def run_rolling_analysis_logic(headers, rows, window_size, step_size, standardize):
     """滚动分析的原生 Numpy 实现"""
